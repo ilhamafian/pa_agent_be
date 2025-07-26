@@ -11,6 +11,9 @@ load_dotenv()  # Make sure environment variables are loaded
 SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+APP_URL = os.getenv("APP_URL")
+
+redirect_uri = f"{APP_URL}/auth/google_callback"
 
 async def send_whatsapp_message(recipient_id: str, message: str):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
@@ -34,7 +37,7 @@ def get_auth_url(user_id):
     flow = Flow.from_client_secrets_file(
         "credentials.json",
         scopes=SCOPES,
-        redirect_uri="https://73c1f7c40ff7.ngrok-free.app/auth/google_callback"  # 🔁 You handle this below
+        redirect_uri=redirect_uri  # 🔁 You handle this below
     )
 
     auth_url, state = flow.authorization_url(

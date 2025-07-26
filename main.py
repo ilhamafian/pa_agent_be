@@ -22,6 +22,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
+APP_URL = os.getenv("APP_URL")
 
 app = FastAPI()
 bot = Bot(token=TOKEN)
@@ -30,6 +31,7 @@ executor = ThreadPoolExecutor()
 now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
 today_str = now.strftime("%Y-%m-%d")
 tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+redirect_uri = f"{APP_URL}/auth/google_callback"
 
 with open("system_prompt.txt", "r", encoding="utf-8") as f:
     raw_prompt = f.read()
@@ -161,7 +163,7 @@ async def auth_callback(request: Request):
     flow = Flow.from_client_secrets_file(
         "credentials.json",
         scopes=SCOPES,
-        redirect_uri="https://73c1f7c40ff7.ngrok-free.app/auth/google_callback",
+        redirect_uri=redirect_uri,
         state=state  
     )
 
