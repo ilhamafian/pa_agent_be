@@ -10,7 +10,8 @@ from tools.calendar import create_event_tool, get_events_tool, create_event, get
 from utils.utils import send_whatsapp_message, get_auth_url
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from google_auth_oauthlib.flow import Flow
 from db import oauth_states_collection, oauth_tokens_collection
 
@@ -25,6 +26,22 @@ PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 APP_URL = os.getenv("APP_URL")
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # or your deployed frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/api/status")
+def get_status():
+    return {
+        "username": "Bossman",
+        "status": "✅ You're all set!",
+    }
+
 bot = Bot(token=TOKEN)
 executor = ThreadPoolExecutor()
 
@@ -198,5 +215,6 @@ async def auth_callback(request: Request):
         }}},
         upsert=True
     )
-
-    return HTMLResponse(content="✅ You're all set! You can now go back to Telegram.", status_code=200)
+    
+    return FileResponse("ui/build/redirect/") 
+    # return HTMLResponse(content="✅ You're all set! You can now go back to Telegram.", status_code=200)
