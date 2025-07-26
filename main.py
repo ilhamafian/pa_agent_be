@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from telegram import Bot
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from concurrent.futures import ThreadPoolExecutor
 from tools.calendar import create_event_tool, get_events_tool, create_event, get_events, AuthRequiredError
 from utils.utils import send_whatsapp_message, get_auth_url
@@ -26,6 +26,19 @@ PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 APP_URL = os.getenv("APP_URL")
 
 app = FastAPI()
+
+origins = [
+    "http://localhost:5173",  # Vite dev server
+    "http://localhost:3000",  # SvelteKit dev or custom port
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 bot = Bot(token=TOKEN)
@@ -159,11 +172,17 @@ async def auth_callback(request: Request):
     code = params.get("code")
 
     if not state or not code:
-        return HTMLResponse(content="❌ Missing state or code from callback.", status_code=400)
+        return RedirectResponse(
+            url="https://pa-agent-fe.vercel.app/auth-result?status=error&reason=missing_state_or_code",
+            status_code=303
+        )
 
     state_data = oauth_states_collection.find_one({"state": state})
     if not state_data:
-        return HTMLResponse(content="❌ Invalid or expired state.", status_code=400)
+        return RedirectResponse(
+            url="https://pa-agent-fe.vercel.app/auth-result?status=error&reason=invalid_state",
+            status_code=303
+        )
 
     user_id = state_data["user_id"]
 
@@ -171,20 +190,26 @@ async def auth_callback(request: Request):
         "credentials.json",
         scopes=SCOPES,
         redirect_uri=redirect_uri,
-        state=state  
+        state=state
     )
 
-    try: 
+    try:
         flow.fetch_token(code=code)
     except Exception as e:
         print("⚠️ fetch_token error:", e)
-        return HTMLResponse(content="❌ Auth failed while fetching token.", status_code=500)
+        return RedirectResponse(
+            url="https://pa-agent-fe.vercel.app/auth-result?status=error&reason=fetch_token_failed",
+            status_code=303
+        )
 
     credentials = flow.credentials
 
     if not credentials or not credentials.token:
         print("❌ No credentials found after fetch_token")
-        return HTMLResponse(content="❌ Credentials missing after token exchange.", status_code=500)
+        return RedirectResponse(
+            url="https://pa-agent-fe.vercel.app/auth-result?status=error&reason=no_credentials",
+            status_code=303
+        )
 
     print("✅ credentials fetched:", credentials.to_json())
 
@@ -202,5 +227,7 @@ async def auth_callback(request: Request):
         upsert=True
     )
 
-    return FileResponse("ui/build/redirect/") 
-    # return HTMLResponse(content="✅ You're all set! You can now go back to Telegram.", status_code=200)
+    return RedirectResponse(
+        url="https://pa-agent-fe.vercel.app/auth-result?status=success",
+        status_code=303
+    )
