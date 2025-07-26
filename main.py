@@ -6,6 +6,8 @@ from telegram import Bot
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from concurrent.futures import ThreadPoolExecutor
+
+import uvicorn
 from tools.calendar import create_event_tool, get_events_tool, create_event, get_events, AuthRequiredError
 from utils.utils import send_whatsapp_message, get_auth_url
 from datetime import datetime, timedelta
@@ -26,6 +28,14 @@ PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 APP_URL = os.getenv("APP_URL")
 
 app = FastAPI()
+
+@app.get("/")
+def read_root():
+    return {"hello": "world"}
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
 
 origins = [
     "http://localhost:5173",  # Vite dev server
