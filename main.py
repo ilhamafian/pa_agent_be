@@ -1,31 +1,29 @@
 import os
 import json
-import re
-import asyncio
-import requests
-
 from dotenv import load_dotenv
 from openai import OpenAI
-from telegram import Update, Bot
+from telegram import Bot
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import PlainTextResponse
 from concurrent.futures import ThreadPoolExecutor
-from tools.calendar import create_event_tool, get_auth_url, get_events_tool, create_event, get_events, AuthRequiredError
+from tools.calendar import create_event_tool, get_events_tool, create_event, get_events, AuthRequiredError
+from utils.utils import send_whatsapp_message, get_auth_url
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-
+from fastapi.responses import HTMLResponse
+from google_auth_oauthlib.flow import Flow
 from db import oauth_states_collection, oauth_tokens_collection
-
-SCOPES = [
-    "https://www.googleapis.com/auth/calendar",
-    "https://www.googleapis.com/auth/calendar.events"
-]
 
 load_dotenv()  # Make sure environment variables are loaded
 
-app = FastAPI()
+SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
+
+app = FastAPI()
 bot = Bot(token=TOKEN)
 executor = ThreadPoolExecutor()
 
@@ -40,27 +38,39 @@ with open("system_prompt.txt", "r", encoding="utf-8") as f:
         tomorrow=tomorrow_str,
     )
 
-def escape_markdown(text: str) -> str:
-    return re.sub(r'([_\*\[\]()~`>#+\-=|{}.!])', r'\\\1', text)
-
 user_memory = {}
 
 tools = [create_event_tool, get_events_tool]
 
-@app.post("/webhook")
-async def telegram_webhook(req: Request):
-    data = await req.json()
-    update = Update.de_json(data, bot)
+@app.get("/auth/callback")
+async def verify_webhook(request: Request):
+    params = request.query_params
+    if (
+        params.get("hub.mode") == "subscribe"
+        and params.get("hub.verify_token") == VERIFY_TOKEN
+    ):
+        return PlainTextResponse(content=params.get("hub.challenge"), status_code=200)
+    return PlainTextResponse("Verification failed", status_code=403)
 
+@app.post("/auth/callback")
+async def receive_whatsapp(request: Request):
+    data = await request.json()
     client = OpenAI(api_key=OPENAI_API_KEY)
 
-    if update.message:
-        user_id = update.message.chat.id
-        user_input = update.message.text
-
-    print("User ID: ", user_id)
-
     try:
+
+        entry = data["entry"][0]
+        changes = entry["changes"][0]
+        value = changes["value"]
+        messages = value.get("messages")
+        if messages:
+            message = messages[0]
+            sender = message["from"]
+            text = message["text"]["body"]
+            
+            user_id = sender
+            user_input = text
+
         # Get user history
         history = user_memory.get(user_id, [])
         history.append({"role": "user", "content": user_input})
@@ -116,7 +126,7 @@ async def telegram_webhook(req: Request):
                     auth_url = get_auth_url(user_id)
                     reply = f"🔒 Please authorize access to your calendar:\n{auth_url}"
 
-                await bot.send_message(chat_id=user_id, text=reply)
+                await send_whatsapp_message(user_id, reply)
                 history.append({"role": "assistant", "content": reply})
                 user_memory[user_id] = history
                 return
@@ -124,7 +134,7 @@ async def telegram_webhook(req: Request):
         # ✅ If no tool calls, fall back to regular model message
         if message.content:
             reply = message.content.strip()
-            await bot.send_message(chat_id=user_id, text=reply)
+            await send_whatsapp_message(user_id, reply)
             history.append({"role": "assistant", "content": reply})
             user_memory[user_id] = history
 
@@ -133,21 +143,7 @@ async def telegram_webhook(req: Request):
 
     return {"ok": True}
 
-@app.get("/set-webhook")
-def set_webhook():
-    ngrok_url = "https://1bb8ed3755d1.ngrok-free.app"  # 👈 Update to current ngrok URL
-    webhook_url = f"{ngrok_url}/webhook"
-    telegram_url = f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={webhook_url}"
-
-    response = requests.get(telegram_url)
-    print("Telegram response:", response.text)  # 🧪 Debugging
-    return JSONResponse(content=response.json())
-
-from fastapi import Request
-from fastapi.responses import HTMLResponse
-from google_auth_oauthlib.flow import Flow
-
-@app.get("/auth/callback")
+@app.get("/auth/google_callback")
 async def auth_callback(request: Request):
     params = dict(request.query_params)
     state = params.get("state")
@@ -165,8 +161,8 @@ async def auth_callback(request: Request):
     flow = Flow.from_client_secrets_file(
         "credentials.json",
         scopes=SCOPES,
-        redirect_uri="https://1bb8ed3755d1.ngrok-free.app/auth/callback",
-        state=state  # ✅ FIX HERE
+        redirect_uri="https://73c1f7c40ff7.ngrok-free.app/auth/google_callback",
+        state=state  
     )
 
     try: 

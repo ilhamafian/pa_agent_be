@@ -3,54 +3,21 @@ import datetime
 import os.path
 import pytz
 import dateparser
+import json
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow, Flow
 from googleapiclient.discovery import build
-from google.auth.transport.requests import Request
 from db import oauth_states_collection, oauth_tokens_collection
 from dateutil.relativedelta import relativedelta
 
+load_dotenv()  # Make sure environment variables are loaded
 
 # If modifying these SCOPES, delete the file token.json.
-SCOPES = [
-    "https://www.googleapis.com/auth/calendar",
-    "https://www.googleapis.com/auth/calendar.events"
-]
+SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 
 class AuthRequiredError(Exception):
     pass
-
-def get_auth_url(user_id):
-    print("Entered get_auth_url")
-    flow = Flow.from_client_secrets_file(
-        "credentials.json",
-        scopes=SCOPES,
-        redirect_uri="https://1bb8ed3755d1.ngrok-free.app/auth/callback"  # 🔁 You handle this below
-    )
-
-    print("In flow: ", flow);
-
-    auth_url, state = flow.authorization_url(
-        prompt='consent',
-        access_type='offline',
-        include_granted_scopes='true'
-    )
-
-    # You should save the `state` with the user_id (in memory or DB)
-    # Example:
-    oauth_states_collection.update_one(
-        {"user_id": user_id},
-        {
-            "$set": {
-                "state": state,
-                "created_at": datetime.now()
-            }
-        },
-        upsert=True
-    )
-
-    return auth_url
 
 def create_event(time: str = None, end_time: str = None, date: str = None, title: str = None, user_id=None, description: str = None, location: str =None) -> dict:
     token_data = oauth_tokens_collection.find_one({"user_id": user_id})
@@ -178,7 +145,6 @@ def get_events(natural_range="today", user_id=None):
 
     return "\n".join(reply_lines)
 
-
 create_event_tool = {
     "type": "function",
     "function": {
@@ -212,7 +178,6 @@ create_event_tool = {
         }
     }
 }
-
 
 get_events_tool = {
     "type": "function",
