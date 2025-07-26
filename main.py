@@ -60,38 +60,42 @@ async def receive_whatsapp(request: Request):
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     try:
-
         entry = data["entry"][0]
         changes = entry["changes"][0]
         value = changes["value"]
         messages = value.get("messages")
-        if messages:
-            message = messages[0]
-            sender = message["from"]
-            text = message["text"]["body"]
-            
-            user_id = sender
-            user_input = text
 
-        # Get user history
+        if not messages:
+            print("⚠️ No incoming WhatsApp message found.")
+            return {"ok": True}
+
+        message = messages[0]
+        sender = message["from"]
+        text = message["text"]["body"]
+
+        user_id = sender
+        user_input = text
+
+        # 🧠 Get or initialize conversation history
         history = user_memory.get(user_id, [])
         history.append({"role": "user", "content": user_input})
 
-        # Prepare full messages
-        messages = [{"role": "system", "content": system_prompt}] + history[-10:]
+        # 🔧 Create message payload for OpenAI
+        chat_messages = [{"role": "system", "content": system_prompt}] + history[-10:]
 
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=messages,
+            messages=chat_messages,
             tools=tools,
             tool_choice="auto"
         )
 
-        message = response.choices[0].message
-        print("message:", message)
+        ai_message = response.choices[0].message
+        print("message:", ai_message)
 
-        if message.tool_calls:
-            for tool_call in message.tool_calls:
+        # 🛠️ Handle tool calls
+        if ai_message.tool_calls:
+            for tool_call in ai_message.tool_calls:
                 function_name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments)
 
@@ -131,11 +135,11 @@ async def receive_whatsapp(request: Request):
                 await send_whatsapp_message(user_id, reply)
                 history.append({"role": "assistant", "content": reply})
                 user_memory[user_id] = history
-                return
+                return {"ok": True}
 
-        # ✅ If no tool calls, fall back to regular model message
-        if message.content:
-            reply = message.content.strip()
+        # 💬 Fallback: regular message (no function)
+        if ai_message.content:
+            reply = ai_message.content.strip()
             await send_whatsapp_message(user_id, reply)
             history.append({"role": "assistant", "content": reply})
             user_memory[user_id] = history
