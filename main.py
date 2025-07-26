@@ -27,20 +27,6 @@ APP_URL = os.getenv("APP_URL")
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # or your deployed frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/api/status")
-def get_status():
-    return {
-        "username": "Bossman",
-        "status": "✅ You're all set!",
-    }
 
 bot = Bot(token=TOKEN)
 executor = ThreadPoolExecutor()
@@ -215,6 +201,6 @@ async def auth_callback(request: Request):
         }}},
         upsert=True
     )
-    
+
     return FileResponse("ui/build/redirect/") 
     # return HTMLResponse(content="✅ You're all set! You can now go back to Telegram.", status_code=200)
