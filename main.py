@@ -70,6 +70,8 @@ user_memory = {}
 
 tools = [create_event_tool, get_events_tool]
 
+print("🔥 FastAPI app started!")
+
 @app.get("/auth/callback")
 async def verify_webhook(request: Request):
     print("Entered  verify_webhook")
