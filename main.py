@@ -72,7 +72,9 @@ tools = [create_event_tool, get_events_tool]
 
 @app.get("/auth/callback")
 async def verify_webhook(request: Request):
+    print("Entered  verify_webhook")
     params = request.query_params
+    print("In VERIFY_TOKEN: ", VERIFY_TOKEN)
     if (
         params.get("hub.mode") == "subscribe"
         and params.get("hub.verify_token") == VERIFY_TOKEN
