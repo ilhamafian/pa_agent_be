@@ -93,19 +93,28 @@ def get_events(natural_range="today", user_id=None):
 
     natural_range = natural_range.strip().lower()
     
-    # 1. Try parsing things like "September", "July 2025", etc.
-    month_match = dateparser.parse(
-        f"1 {natural_range}",
+   # Try parsing the range naturally (e.g., "tomorrow", "next week")
+    date_range = dateparser.parse(
+        natural_range,
         settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True}
     )
+    print(f"[DEBUG] Parsed date_range: {date_range}")
 
-    if month_match:
-        start_time = month_match.replace(day=1)
+    # Check if input looks like a month (e.g., "july 2025")
+    month_keywords = [
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december"
+    ]
+    is_month = any(m in natural_range for m in month_keywords)
+
+    if is_month and date_range:
+        start_time = date_range.replace(day=1)
         end_time = (start_time + relativedelta(months=1)) - timedelta(seconds=1)
-        print(f"[DEBUG] Month match -> start: {start_time}, end: {end_time}")
+        print(f"[DEBUG] Detected month -> start: {start_time}, end: {end_time}")
 
     elif " to " in natural_range or " until " in natural_range:
         parts = natural_range.split(" to ") if " to " in natural_range else natural_range.split(" until ")
+        parts = [p.strip() for p in parts]
         start = dateparser.parse(parts[0], settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True})
         end = dateparser.parse(parts[1], settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True})
         if not start or not end:
@@ -114,16 +123,14 @@ def get_events(natural_range="today", user_id=None):
         end_time = end + timedelta(hours=23, minutes=59)
         print(f"[DEBUG] Range match -> start: {start_time}, end: {end_time}")
 
-    else:
-        date_range = dateparser.parse(
-            natural_range,
-            settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True}
-        )
-        if not date_range:
-            return "❌ Sorry, I couldn't understand that time."
+    elif date_range:
         start_time = date_range
         end_time = start_time + timedelta(days=1)
         print(f"[DEBUG] Single day match -> start: {start_time}, end: {end_time}")
+
+    else:
+        print(f"[DEBUG] Failed to parse: {natural_range}")
+        return "❌ Sorry, I couldn't understand that time."
 
     # Fetch events
     print(f"[DEBUG] Fetching events from {start_time.isoformat()} to {end_time.isoformat()}")
