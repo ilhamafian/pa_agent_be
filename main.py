@@ -179,6 +179,11 @@ async def receive_whatsapp(request: Request):
 
     return {"ok": True}
 
+async def test_page(request: Request):
+    print("✅ Tested")
+    print("🌐 URL:", str(request.url))
+    return PlainTextResponse("Test page reached!", status_code=200)
+    
 @app.get("/auth/google_callback")
 async def auth_callback(request: Request):
     params = dict(request.query_params)
