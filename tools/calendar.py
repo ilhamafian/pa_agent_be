@@ -75,10 +75,12 @@ def create_event(time: str = None, end_time: str = None, date: str = None, title
     print('Event created:', event.get('htmlLink'))
     return event
 
-def get_events(natural_range="today", user_id=None):
+def get_events(natural_range="today", user_id=None): 
     print("Entered get_events")
-    token_data = oauth_tokens_collection.find_one({"user_id": user_id})
+    print(f"[DEBUG] natural_range input: {natural_range}")
+    print(f"[DEBUG] user_id: {user_id}")
 
+    token_data = oauth_tokens_collection.find_one({"user_id": user_id})
     if not token_data:
         raise AuthRequiredError("AUTH_REQUIRED")
 
@@ -87,16 +89,21 @@ def get_events(natural_range="today", user_id=None):
 
     tz = pytz.timezone("Asia/Kuala_Lumpur")
     now = datetime.now(tz)
+    print(f"[DEBUG] current time: {now}")
 
     natural_range = natural_range.strip().lower()
     
-    # Try parsing "september", "july 2025", etc.
-    month_match = dateparser.parse(f"1 {natural_range}", settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True})
-    
+    # 1. Try parsing things like "September", "July 2025", etc.
+    month_match = dateparser.parse(
+        f"1 {natural_range}",
+        settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True}
+    )
+
     if month_match:
         start_time = month_match.replace(day=1)
         end_time = (start_time + relativedelta(months=1)) - timedelta(seconds=1)
-    
+        print(f"[DEBUG] Month match -> start: {start_time}, end: {end_time}")
+
     elif " to " in natural_range or " until " in natural_range:
         parts = natural_range.split(" to ") if " to " in natural_range else natural_range.split(" until ")
         start = dateparser.parse(parts[0], settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True})
@@ -105,15 +112,21 @@ def get_events(natural_range="today", user_id=None):
             return "❌ Sorry, I couldn't understand that date range."
         start_time = start
         end_time = end + timedelta(hours=23, minutes=59)
-    
+        print(f"[DEBUG] Range match -> start: {start_time}, end: {end_time}")
+
     else:
-        date_range = dateparser.parse(natural_range, settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True})
+        date_range = dateparser.parse(
+            natural_range,
+            settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True}
+        )
         if not date_range:
             return "❌ Sorry, I couldn't understand that time."
         start_time = date_range
         end_time = start_time + timedelta(days=1)
+        print(f"[DEBUG] Single day match -> start: {start_time}, end: {end_time}")
 
     # Fetch events
+    print(f"[DEBUG] Fetching events from {start_time.isoformat()} to {end_time.isoformat()}")
     events_result = service.events().list(
         calendarId='primary',
         timeMin=start_time.isoformat(),
@@ -123,6 +136,7 @@ def get_events(natural_range="today", user_id=None):
     ).execute()
 
     events = events_result.get("items", [])
+    print(f"[DEBUG] Number of events fetched: {len(events)}")
 
     if not events:
         return f"📅 You have no events for {natural_range}."
@@ -133,6 +147,8 @@ def get_events(natural_range="today", user_id=None):
         title = event.get("summary", "No Title")
         start = event["start"].get("dateTime", event["start"].get("date"))
         end = event["end"].get("dateTime", event["end"].get("date"))
+
+        print(f"[DEBUG] Event raw -> title: {title}, start: {start}, end: {end}")
 
         try:
             start_dt = datetime.fromisoformat(start)
@@ -183,20 +199,24 @@ get_events_tool = {
     "type": "function",
     "function": {
         "name": "get_events",
-        "description": "Retrieve events from your Google Calendar using natural language time ranges.",
+        "description": "Fetches Google Calendar events using a natural language time range.",
         "parameters": {
             "type": "object",
             "properties": {
                 "natural_range": {
                     "type": "string",
                     "description": (
-                        "The time range to fetch events for. Accepts natural language such as "
-                        "'today', 'tomorrow', 'this weekend', 'Friday', 'next 3 days', "
-                        "or a specific range like 'July 10 to July 14'."
+                        "A natural language description of the time range to fetch events for. "
+                        "Examples include: 'today', 'tomorrow', 'next week', 'this weekend', "
+                        "'Friday to Sunday', 'August 1st until August 5th', or even 'in 3 days'."
                     )
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "The ID of the user to fetch calendar events for. Required for identifying credentials."
                 }
             },
-            "required": ["natural_range"]
+            "required": ["natural_range", "user_id"]
         }
     }
 }

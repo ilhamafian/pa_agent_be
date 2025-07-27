@@ -149,6 +149,7 @@ async def receive_whatsapp(request: Request):
                         )
 
                     elif function_name == "get_events":
+                        print("range in tool_calls: ",args["natural_range"])
                         reply = get_events(natural_range=args["natural_range"], user_id=user_id)
 
                     else:
@@ -174,10 +175,6 @@ async def receive_whatsapp(request: Request):
         print(f"Error in handle_message: {e}")
 
     return {"ok": True}
-
-@app.get("/")
-def home():
-    return {"message": "hi"}
 
 @app.get("/test")
 async def test_page(request: Request):
