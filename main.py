@@ -179,6 +179,7 @@ async def receive_whatsapp(request: Request):
 
     return {"ok": True}
 
+@app.get("/test")
 async def test_page(request: Request):
     print("✅ Tested")
     print("🌐 URL:", str(request.url))
