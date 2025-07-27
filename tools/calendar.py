@@ -19,7 +19,7 @@ SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 class AuthRequiredError(Exception):
     pass
 
-def create_event(time: str = None, end_time: str = None, date: str = None, title: str = None, user_id=None, description: str = None, location: str =None) -> dict:
+def create_event(time: str = None, end_time: str = None, date: str = None, title: str = None, user_id=None, description: str = None) -> dict:
     token_data = oauth_tokens_collection.find_one({"user_id": user_id})
     print("Looking for user_id:", user_id, type(user_id))
 
@@ -211,12 +211,9 @@ get_events_tool = {
                         "'Friday to Sunday', 'August 1st until August 5th', or even 'in 3 days'."
                     )
                 },
-                "user_id": {
-                    "type": "string",
-                    "description": "The ID of the user to fetch calendar events for. Required for identifying credentials."
-                }
+                
             },
-            "required": ["natural_range", "user_id"]
+            "required": ["natural_range"]
         }
     }
 }
