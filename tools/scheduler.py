@@ -89,6 +89,6 @@ def start_scheduler():
             else:
                 print(f"[REMINDER JOB] No events to notify for user {user_id}.")
 
-    scheduler.add_job(daily_reminder_job, 'cron', hour=16, minute=20)
+    scheduler.add_job(daily_reminder_job, 'cron', hour=19, minute=00)
     scheduler.start()
     print("\n✅ Scheduler started and daily reminder job registered at 7PM daily.")

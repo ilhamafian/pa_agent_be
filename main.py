@@ -93,7 +93,7 @@ async def receive_whatsapp(request: Request):
         messages = value.get("messages")
 
         if not messages:
-            print("\u26a0\ufe0f No incoming WhatsApp message found.")
+            print("⚠️ No incoming WhatsApp message found.")
             return {"ok": True}
 
         message = messages[0]
@@ -138,7 +138,7 @@ async def receive_whatsapp(request: Request):
                             else "Time: All-day\n"
                         )
                         reply = (
-                            f"\ud83d\udcc5 Calendar Event Created\n\n"
+                            f"📅 Calendar Event Created\n\n"
                             f"Title: {args['title']}\n"
                             f"Date: {args['date']}\n"
                             f"{time_display}"
@@ -149,11 +149,11 @@ async def receive_whatsapp(request: Request):
                         reply = get_events(natural_range=args["natural_range"], user_id=user_id)
 
                     else:
-                        reply = "\u274c Unknown function requested."
+                        reply = "❌ Unknown function requested."
 
                 except AuthRequiredError:
                     auth_url = get_auth_url(user_id)
-                    reply = f"\ud83d\udd10 Please authorize access to your calendar:\n{auth_url}"
+                    reply = f"🔐 Please authorize access to your calendar:\n{auth_url}"
 
                 safe_reply = clean_unicode(reply)
                 await send_whatsapp_message(user_id, safe_reply)
@@ -208,7 +208,7 @@ async def auth_callback(request: Request):
     try:
         flow.fetch_token(code=code)
     except Exception as e:
-        print("\u26a0\ufe0f fetch_token error:", e)
+        print("⚠️ fetch_token error:", e)
         return RedirectResponse(
             url="https://pa-agent-fe.vercel.app/auth-result?status=error&reason=fetch_token_failed",
             status_code=303
@@ -217,7 +217,7 @@ async def auth_callback(request: Request):
     credentials = flow.credentials
 
     if not credentials or not credentials.token:
-        print("\u274c No credentials found after fetch_token")
+        print("❌ No credentials found after fetch_token")
         return RedirectResponse(
             url="https://pa-agent-fe.vercel.app/auth-result?status=error&reason=no_credentials",
             status_code=303
