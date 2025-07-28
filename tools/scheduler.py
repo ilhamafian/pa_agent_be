@@ -7,7 +7,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
-from db import get_all_users, oauth_tokens_collection
+from db.mongo import get_all_users, oauth_tokens_collection
 from utils.utils import send_whatsapp_message
 
 load_dotenv()

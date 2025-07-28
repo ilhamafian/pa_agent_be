@@ -21,7 +21,7 @@ from tools.calendar import (
 )
 from tools.scheduler import start_scheduler
 from utils.utils import send_whatsapp_message, get_auth_url
-from db import oauth_states_collection, oauth_tokens_collection
+from db.mongo import oauth_states_collection, oauth_tokens_collection
 
 # === Setup ===
 load_dotenv()
@@ -64,7 +64,7 @@ with open("system_prompt.txt", "r", encoding="utf-8") as f:
     raw_prompt = f.read()
     system_prompt = raw_prompt.format(today=today_str, tomorrow=tomorrow_str)
 
-print("\ud83d\udd25 FastAPI app started!")
+print(" FastAPI app started!")
 
 # === Routes ===
 @app.get("/")
@@ -241,7 +241,7 @@ async def auth_callback(request: Request):
     )
 
 # === Start Scheduler ===
-# start_scheduler()
+start_scheduler()
 
 # === Run Server ===
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from db import oauth_states_collection, oauth_tokens_collection
+from db.mongo import oauth_tokens_collection
 from dateutil.relativedelta import relativedelta
 
 load_dotenv()  # Make sure environment variables are loaded

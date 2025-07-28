@@ -4,7 +4,7 @@ import json
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import Flow
 from datetime import datetime
-from db import oauth_states_collection
+from db.mongo import oauth_states_collection
 
 load_dotenv()  # Make sure environment variables are loaded
 
