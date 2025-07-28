@@ -20,7 +20,7 @@ from tools.calendar import (
     AuthRequiredError
 )
 from tools.scheduler import start_scheduler
-from utils.utils import send_whatsapp_message, get_auth_url
+from utils.utils import clean_unicode, send_whatsapp_message, get_auth_url
 from db.mongo import oauth_states_collection, oauth_tokens_collection
 
 # === Setup ===
@@ -155,14 +155,16 @@ async def receive_whatsapp(request: Request):
                     auth_url = get_auth_url(user_id)
                     reply = f"\ud83d\udd10 Please authorize access to your calendar:\n{auth_url}"
 
-                await send_whatsapp_message(user_id, reply)
+                safe_reply = clean_unicode(reply)
+                await send_whatsapp_message(user_id, safe_reply)
                 history.append({"role": "assistant", "content": reply})
                 user_memory[user_id] = history
                 return {"ok": True}
 
         if ai_message.content:
             reply = ai_message.content.strip()
-            await send_whatsapp_message(user_id, reply)
+            safe_reply = clean_unicode(reply)
+            await send_whatsapp_message(user_id, safe_reply)
             history.append({"role": "assistant", "content": reply})
             user_memory[user_id] = history
 

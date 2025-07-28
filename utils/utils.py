@@ -15,6 +15,9 @@ APP_URL = os.getenv("APP_URL")
 
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
+def clean_unicode(text):
+    return text.encode("utf-8", errors="replace").decode("utf-8")
+
 async def send_whatsapp_message(recipient_id: str, message: str):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
     headers = {
