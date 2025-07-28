@@ -241,7 +241,7 @@ async def auth_callback(request: Request):
     )
 
 # === Start Scheduler ===
-start_scheduler()
+# start_scheduler()
 
 # === Run Server ===
 if __name__ == "__main__":
