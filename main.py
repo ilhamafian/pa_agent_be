@@ -5,17 +5,26 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 from concurrent.futures import ThreadPoolExecutor
-from tools.calendar import create_event_tool, get_events_tool, create_event, get_events, AuthRequiredError
-from utils.utils import send_whatsapp_message, get_auth_url
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware
 from google_auth_oauthlib.flow import Flow
+
+# Internal Imports
+from tools.calendar import (
+    create_event_tool,
+    get_events_tool,
+    create_event,
+    get_events,
+    AuthRequiredError
+)
+from tools.scheduler import start_scheduler
+from utils.utils import send_whatsapp_message, get_auth_url
 from db import oauth_states_collection, oauth_tokens_collection
 
-load_dotenv()  # Make sure environment variables are loaded
+# === Setup ===
+load_dotenv()
 
 SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 TOKEN = os.getenv("BOT_TOKEN")
@@ -27,17 +36,10 @@ APP_URL = os.getenv("APP_URL")
 
 app = FastAPI()
 
-@app.get("/")
-def read_root():
-    return {"hello": "world"}
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
-
+# === Middleware ===
 origins = [
-    "http://localhost:5173",  # Vite dev server
-    "http://localhost:3000",  # SvelteKit dev or custom port
+    "http://localhost:5173",
+    "http://localhost:3000",
 ]
 
 app.add_middleware(
@@ -48,7 +50,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# === Globals ===
 executor = ThreadPoolExecutor()
+user_memory = {}
+tools = [create_event_tool, get_events_tool]
 
 now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
 today_str = now.strftime("%Y-%m-%d")
@@ -57,22 +62,18 @@ redirect_uri = f"{APP_URL}/auth/google_callback"
 
 with open("system_prompt.txt", "r", encoding="utf-8") as f:
     raw_prompt = f.read()
-    system_prompt = raw_prompt.format(
-        today=today_str,
-        tomorrow=tomorrow_str,
-    )
+    system_prompt = raw_prompt.format(today=today_str, tomorrow=tomorrow_str)
 
-user_memory = {}
+print("\ud83d\udd25 FastAPI app started!")
 
-tools = [create_event_tool, get_events_tool]
-
-print("🔥 FastAPI app started!")
+# === Routes ===
+@app.get("/")
+def read_root():
+    return {"hello": "world"}
 
 @app.get("/auth/callback")
 async def verify_webhook(request: Request):
-    print("Entered  verify_webhook")
     params = request.query_params
-    print("In VERIFY_TOKEN: ", VERIFY_TOKEN)
     if (
         params.get("hub.mode") == "subscribe"
         and params.get("hub.verify_token") == VERIFY_TOKEN
@@ -92,7 +93,7 @@ async def receive_whatsapp(request: Request):
         messages = value.get("messages")
 
         if not messages:
-            print("⚠️ No incoming WhatsApp message found.")
+            print("\u26a0\ufe0f No incoming WhatsApp message found.")
             return {"ok": True}
 
         message = messages[0]
@@ -102,11 +103,9 @@ async def receive_whatsapp(request: Request):
         user_id = sender
         user_input = text
 
-        # 🧠 Get or initialize conversation history
         history = user_memory.get(user_id, [])
         history.append({"role": "user", "content": user_input})
 
-        # 🔧 Create message payload for OpenAI
         chat_messages = [{"role": "system", "content": system_prompt}] + history[-10:]
 
         response = client.chat.completions.create(
@@ -117,9 +116,7 @@ async def receive_whatsapp(request: Request):
         )
 
         ai_message = response.choices[0].message
-        print("message:", ai_message)
 
-        # 🛠️ Handle tool calls
         if ai_message.tool_calls:
             for tool_call in ai_message.tool_calls:
                 function_name = tool_call.function.name
@@ -135,13 +132,13 @@ async def receive_whatsapp(request: Request):
                             description=args.get("description"),
                             user_id=user_id
                         )
-                        if args.get("time") and args.get("end_time"):
-                            time_display = f"Time: {args['time']} - {args['end_time']}\n"
-                        else:
-                            time_display = "Time: All-day\n"
-
+                        time_display = (
+                            f"Time: {args['time']} - {args['end_time']}\n"
+                            if args.get("time") and args.get("end_time")
+                            else "Time: All-day\n"
+                        )
                         reply = (
-                            f"📅 Calendar Event Created\n\n"
+                            f"\ud83d\udcc5 Calendar Event Created\n\n"
                             f"Title: {args['title']}\n"
                             f"Date: {args['date']}\n"
                             f"{time_display}"
@@ -149,22 +146,20 @@ async def receive_whatsapp(request: Request):
                         )
 
                     elif function_name == "get_events":
-                        print("range in tool_calls: ",args["natural_range"])
                         reply = get_events(natural_range=args["natural_range"], user_id=user_id)
 
                     else:
-                        reply = "❌ Unknown function requested."
+                        reply = "\u274c Unknown function requested."
 
                 except AuthRequiredError:
                     auth_url = get_auth_url(user_id)
-                    reply = f"🔒 Please authorize access to your calendar:\n{auth_url}"
+                    reply = f"\ud83d\udd10 Please authorize access to your calendar:\n{auth_url}"
 
                 await send_whatsapp_message(user_id, reply)
                 history.append({"role": "assistant", "content": reply})
                 user_memory[user_id] = history
                 return {"ok": True}
 
-        # 💬 Fallback: regular message (no function)
         if ai_message.content:
             reply = ai_message.content.strip()
             await send_whatsapp_message(user_id, reply)
@@ -178,10 +173,8 @@ async def receive_whatsapp(request: Request):
 
 @app.get("/test")
 async def test_page(request: Request):
-    print("✅ Tested")
-    print("🌐 URL:", str(request.url))
     return PlainTextResponse("Test page reached!", status_code=200)
-    
+
 @app.get("/auth/google_callback")
 async def auth_callback(request: Request):
     params = dict(request.query_params)
@@ -213,7 +206,7 @@ async def auth_callback(request: Request):
     try:
         flow.fetch_token(code=code)
     except Exception as e:
-        print("⚠️ fetch_token error:", e)
+        print("\u26a0\ufe0f fetch_token error:", e)
         return RedirectResponse(
             url="https://pa-agent-fe.vercel.app/auth-result?status=error&reason=fetch_token_failed",
             status_code=303
@@ -222,13 +215,11 @@ async def auth_callback(request: Request):
     credentials = flow.credentials
 
     if not credentials or not credentials.token:
-        print("❌ No credentials found after fetch_token")
+        print("\u274c No credentials found after fetch_token")
         return RedirectResponse(
             url="https://pa-agent-fe.vercel.app/auth-result?status=error&reason=no_credentials",
             status_code=303
         )
-
-    print("✅ credentials fetched:", credentials.to_json())
 
     oauth_tokens_collection.update_one(
         {"user_id": user_id},
@@ -248,3 +239,11 @@ async def auth_callback(request: Request):
         url="https://pa-agent-fe.vercel.app/auth-result?status=success",
         status_code=303
     )
+
+# === Start Scheduler ===
+start_scheduler()
+
+# === Run Server ===
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)

@@ -7,3 +7,6 @@ client = MongoClient(MONGO_URI)
 db = client["oauth_db"]
 oauth_states_collection = db["oauth_states"]
 oauth_tokens_collection = db["oauth_tokens"]
+
+def get_all_users():
+    return oauth_tokens_collection.find({}, {"user_id": 1})
