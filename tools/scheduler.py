@@ -53,7 +53,7 @@ def format_event_reminder(events, date):
     if not events:
         return f"📅 You have no events on {date.strftime('%A, %B %d')}."
 
-    lines = [f"📅 Events for {date.strftime('%A, %B %d')}:\n"]
+    lines = [f"📅 Upcoming events on {date.strftime('%A, %B %d')}:\n"]
     for event in events:
         title = event.get("summary", "No Title")
         start = event["start"].get("dateTime", event["start"].get("date"))
@@ -72,23 +72,26 @@ def format_event_reminder(events, date):
 
 def start_scheduler():
     def daily_reminder_job():
-        print("\n[REMINDER JOB] Starting daily reminder job...")
-        tomorrow = (datetime.now(pytz.timezone("Asia/Kuala_Lumpur")) + timedelta(days=1)).date()
-        users = get_all_users()
-        print(f"[REMINDER JOB] Checking events for {len(users)} users on {tomorrow}")
+        try:
+            print("\n[REMINDER JOB] Starting daily reminder job...")
+            tomorrow = (datetime.now(pytz.timezone("Asia/Kuala_Lumpur")) + timedelta(days=1)).date()
+            users = get_all_users() or []
+            print(f"[REMINDER JOB] Checking events for {len(users)} users on {tomorrow}")
 
-        for user in users:
-            user_id = user.get("user_id")
-            print(f"[REMINDER JOB] Fetching events for user_id: {user_id}")
-            events = get_events_for_user_on_date(user_id, tomorrow)
-            if events:
-                message = format_event_reminder(events, tomorrow)
-                print(f"[REMINDER JOB] Sending message to user {user_id}:")
-                print(message)
-                send_whatsapp_message(user_id, message)
-            else:
-                print(f"[REMINDER JOB] No events to notify for user {user_id}.")
+            for user in users:
+                user_id = user.get("user_id")
+                print(f"[REMINDER JOB] Fetching events for user_id: {user_id}")
+                events = get_events_for_user_on_date(user_id, tomorrow)
+                if events:
+                    message = format_event_reminder(events, tomorrow)
+                    print(f"[REMINDER JOB] Sending message to user {user_id}:")
+                    print(message)
+                    send_whatsapp_message(user_id, message)
+                else:
+                    print(f"[REMINDER JOB] No events to notify for user {user_id}.")
+        except Exception as e:
+            print(f"🔥 [REMINDER JOB ERROR] {e}")
 
-    scheduler.add_job(daily_reminder_job, 'cron', hour=19, minute=00)
+    scheduler.add_job(daily_reminder_job, 'cron', hour=22, minute=30)
     scheduler.start()
     print("\n✅ Scheduler started and daily reminder job registered at 7PM daily.")
