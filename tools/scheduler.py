@@ -2,7 +2,6 @@ import json
 import os.path
 import pytz
 import asyncio
-from main import event_loop  # Or however you import it
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -97,6 +96,6 @@ def start_scheduler():
         except Exception as e:
             print(f"🔥 [REMINDER JOB ERROR] {e}")
 
-    scheduler.add_job(daily_reminder_job, 'cron', hour=23, minute=0)
+    scheduler.add_job(daily_reminder_job, 'cron', hour=23, minute=30)
     scheduler.start()
     print("\n✅ Scheduler started and daily reminder job registered at 10:00 AM daily.")
