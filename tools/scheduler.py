@@ -96,6 +96,6 @@ def start_scheduler():
         except Exception as e:
             print(f"🔥 [REMINDER JOB ERROR] {e}")
 
-    scheduler.add_job(daily_reminder_job, 'cron', hour=23, minute=30)
+    scheduler.add_job(daily_reminder_job, 'cron', hour=19, minute=30)
     scheduler.start()
     print("\n✅ Scheduler started and daily reminder job registered at 10:00 AM daily.")
