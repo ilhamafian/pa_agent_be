@@ -1,5 +1,7 @@
+import asyncio
 import os
 import json
+import threading
 import uvicorn
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -49,6 +51,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+event_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(event_loop)
+threading.Thread(target=event_loop.run_forever, daemon=True).start()
 
 # === Globals ===
 executor = ThreadPoolExecutor()

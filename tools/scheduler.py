@@ -2,6 +2,7 @@ import json
 import os.path
 import pytz
 import asyncio
+from main import event_loop  # Or however you import it
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -87,13 +88,15 @@ def start_scheduler():
                     message = format_event_reminder(events, tomorrow)
                     print(f"[REMINDER JOB] Sending message to user {user_id}:")
                     print(message)
-                    loop = asyncio.get_event_loop()
-                    loop.run_until_complete(send_whatsapp_message(user_id, message))
+                    asyncio.run_coroutine_threadsafe(
+                        send_whatsapp_message(user_id, message),
+                        event_loop
+                    )
                 else:
                     print(f"[REMINDER JOB] No events to notify for user {user_id}.")
         except Exception as e:
             print(f"🔥 [REMINDER JOB ERROR] {e}")
 
-    scheduler.add_job(daily_reminder_job, 'cron', hour=1, minute=30)
+    scheduler.add_job(daily_reminder_job, 'cron', hour=10, minute=0)
     scheduler.start()
-    print("\n✅ Scheduler started and daily reminder job registered at 1:00 AM daily.")
+    print("\n✅ Scheduler started and daily reminder job registered at 10:00 AM daily.")
