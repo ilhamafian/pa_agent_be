@@ -10,7 +10,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 from db.mongo import get_all_users, oauth_tokens_collection
-from utils.utils import send_whatsapp_message
+from utils.utils import send_whatsapp_message, event_loop
 
 load_dotenv()
 
@@ -97,6 +97,6 @@ def start_scheduler():
         except Exception as e:
             print(f"🔥 [REMINDER JOB ERROR] {e}")
 
-    scheduler.add_job(daily_reminder_job, 'cron', hour=10, minute=0)
+    scheduler.add_job(daily_reminder_job, 'cron', hour=23, minute=0)
     scheduler.start()
     print("\n✅ Scheduler started and daily reminder job registered at 10:00 AM daily.")

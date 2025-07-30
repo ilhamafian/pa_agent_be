@@ -1,6 +1,8 @@
 import httpx
 import os
 import json
+import asyncio
+import threading
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import Flow
 from datetime import datetime
@@ -61,3 +63,7 @@ def get_auth_url(user_id):
     )
 
     return auth_url
+
+event_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(event_loop)
+threading.Thread(target=event_loop.run_forever, daemon=True).start()
