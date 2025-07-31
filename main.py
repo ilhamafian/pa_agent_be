@@ -19,6 +19,14 @@ from tools.calendar import (
     get_events,
     AuthRequiredError
 )
+from tools.reminder import (
+    create_event_reminder_tool,
+    create_custom_reminder_tool,
+    list_reminders_tool,
+    create_event_reminder,
+    create_custom_reminder,
+    list_reminders
+)
 from tools.scheduler import start_scheduler
 from utils.utils import clean_unicode, send_whatsapp_message, get_auth_url
 from db.mongo import oauth_states_collection, oauth_tokens_collection
@@ -53,7 +61,7 @@ app.add_middleware(
 # === Globals ===
 executor = ThreadPoolExecutor()
 user_memory = {}
-tools = [create_event_tool, get_events_tool]
+tools = [create_event_tool, get_events_tool, create_event_reminder_tool, create_custom_reminder_tool, list_reminders_tool]
 
 now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
 today_str = now.strftime("%Y-%m-%d")
@@ -147,6 +155,28 @@ async def receive_whatsapp(request: Request):
 
                     elif function_name == "get_events":
                         reply = get_events(natural_range=args["natural_range"], user_id=user_id)
+
+                    elif function_name == "create_event_reminder":
+                        result = create_event_reminder(
+                            event_title=args["event_title"],
+                            minutes_before=args.get("minutes_before", 30),
+                            event_date=args.get("event_date"),
+                            event_time=args.get("event_time"),
+                            user_id=user_id
+                        )
+                        reply = result["message"]
+
+                    elif function_name == "create_custom_reminder":
+                        result = create_custom_reminder(
+                            message=args["message"],
+                            remind_in=args["remind_in"],
+                            user_id=user_id
+                        )
+                        reply = result["message"]
+
+                    elif function_name == "list_reminders":
+                        result = list_reminders(user_id=user_id)
+                        reply = result["message"]
 
                     else:
                         reply = "❌ Unknown function requested."
