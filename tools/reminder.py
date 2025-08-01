@@ -141,21 +141,69 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None) -> dict:
     tz = pytz.timezone("Asia/Kuala_Lumpur")
     now = datetime.now(tz)
     
+    # Preprocess the remind_in text to normalize common phrases
+    remind_in_lower = remind_in.lower().strip()
+    
+    # Handle common variations
+    if remind_in_lower.startswith("the next "):
+        remind_in_normalized = remind_in_lower.replace("the next ", "in ")
+    elif remind_in_lower.startswith("next "):
+        remind_in_normalized = remind_in_lower.replace("next ", "in ")
+    else:
+        remind_in_normalized = remind_in_lower
+    
+    # Replace "mins" with "minutes"
+    if "mins" in remind_in_normalized and "minutes" not in remind_in_normalized:
+        remind_in_normalized = remind_in_normalized.replace("mins", "minutes")
+    
+    # Handle special cases
+    if remind_in_normalized == "in hour":
+        remind_in_normalized = "in 1 hour"
+    elif remind_in_normalized == "in minute":
+        remind_in_normalized = "in 1 minute"
+    
+    # Ensure "in" prefix for relative times
+    if remind_in_normalized.endswith(" minutes") or remind_in_normalized.endswith(" hours") or remind_in_normalized.endswith(" days"):
+        if not remind_in_normalized.startswith("in "):
+            remind_in_normalized = "in " + remind_in_normalized
+    
+    print(f"[DEBUG] Original time input: '{remind_in}'")
+    print(f"[DEBUG] Normalized time input: '{remind_in_normalized}'")
+    
     # Try to parse the natural language time
     reminder_time = dateparser.parse(
-        remind_in,
+        remind_in_normalized,
         settings={
             "TIMEZONE": "Asia/Kuala_Lumpur",
             "RETURN_AS_TIMEZONE_AWARE": True,
-            "RELATIVE_BASE": now
+            "RELATIVE_BASE": now,
+            "PREFER_FUTURE": True
         }
     )
+    
+    print(f"[DEBUG] Parsed time: {reminder_time}")
+    print(f"[DEBUG] Current time: {now}")
+    
+    if not reminder_time:
+        # Try the original input if normalization didn't work
+        reminder_time = dateparser.parse(
+            remind_in,
+            settings={
+                "TIMEZONE": "Asia/Kuala_Lumpur",
+                "RETURN_AS_TIMEZONE_AWARE": True,
+                "RELATIVE_BASE": now,
+                "PREFER_FUTURE": True
+            }
+        )
+        print(f"[DEBUG] Fallback parsed time: {reminder_time}")
     
     if not reminder_time:
         return {"status": "error", "message": f"❌ Sorry, I couldn't understand the time '{remind_in}'. Please try something like '3 hours', 'tomorrow at 9am', or 'in 30 minutes'."}
     
-    if reminder_time <= now:
-        return {"status": "error", "message": "❌ The reminder time must be in the future."}
+    # Add a small buffer to ensure the time is in the future (to handle millisecond precision issues)
+    if reminder_time <= now + timedelta(seconds=1):
+        print(f"[DEBUG] Time not in future - reminder_time: {reminder_time}, now: {now}")
+        return {"status": "error", "message": f"❌ The reminder time must be in the future. I interpreted '{remind_in}' as {reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')}, but the current time is {now.strftime('%Y-%m-%d %H:%M:%S %Z')}."}
     
     # Store reminder in database
     reminder_data = {
@@ -164,6 +212,7 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None) -> dict:
         "message": f"⏰ Reminder: {message}",
         "reminder_time": reminder_time,
         "original_time_input": remind_in,
+        "normalized_time_input": remind_in_normalized,
         "status": "scheduled",
         "created_at": now
     }
@@ -327,7 +376,7 @@ create_custom_reminder_tool = {
                 },
                 "remind_in": {
                     "type": "string",
-                    "description": "When to send the reminder in natural language (e.g., '3 hours', 'tomorrow at 9am', 'in 30 minutes', '2 days from now')"
+                    "description": "When to send the reminder in natural language. Extract the time portion from user input and normalize it. Examples: 'in 30 minutes', '3 hours', 'tomorrow at 9am', '2 days from now'. Common user phrases like 'the next 30 mins' should be extracted as '30 minutes', 'next hour' as '1 hour', etc."
                 }
             },
             "required": ["message", "remind_in"]
