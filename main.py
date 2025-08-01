@@ -29,7 +29,13 @@ from tools.reminder import (
 )
 from tools.scheduler import start_scheduler
 from utils.utils import clean_unicode, send_whatsapp_message, get_auth_url
-from db.mongo import oauth_states_collection, oauth_tokens_collection
+from db.mongo import (
+    oauth_states_collection, 
+    oauth_tokens_collection,
+    get_conversation_history,
+    save_message_to_history,
+    migrate_memory_to_mongodb
+)
 
 # === Setup ===
 load_dotenv()
@@ -60,6 +66,7 @@ app.add_middleware(
 
 # === Globals ===
 executor = ThreadPoolExecutor()
+# Keep user_memory as fallback for when MongoDB is unavailable
 user_memory = {}
 tools = [create_event_tool, get_events_tool, create_event_reminder_tool, create_custom_reminder_tool, list_reminders_tool]
 
@@ -72,7 +79,15 @@ with open("system_prompt.txt", "r", encoding="utf-8") as f:
     raw_prompt = f.read()
     system_prompt = raw_prompt.format(today=today_str, tomorrow=tomorrow_str)
 
-print(" FastAPI app started!")
+print("🚀 FastAPI app started!")
+
+# === Migrate existing in-memory conversations to MongoDB ===
+if user_memory:
+    print("🔄 Migrating existing conversations to MongoDB...")
+    migrate_memory_to_mongodb(user_memory)
+    user_memory.clear()  # Clear after migration
+else:
+    print("📭 No existing conversations to migrate")
 
 # === Routes ===
 @app.get("/")
@@ -111,9 +126,15 @@ async def receive_whatsapp(request: Request):
         user_id = sender
         user_input = text
 
-        history = user_memory.get(user_id, [])
-        history.append({"role": "user", "content": user_input})
+        # Get conversation history from MongoDB (with fallback to in-memory)
+        history = get_conversation_history(user_id, user_memory)
+        
+        # Add user message to history
+        user_message = {"role": "user", "content": user_input}
+        save_message_to_history(user_id, user_message, user_memory)
+        history.append(user_message)
 
+        # Prepare chat messages with system prompt + recent history (last 10 messages)
         chat_messages = [{"role": "system", "content": system_prompt}] + history[-10:]
 
         response = client.chat.completions.create(
@@ -187,16 +208,21 @@ async def receive_whatsapp(request: Request):
 
                 safe_reply = clean_unicode(reply)
                 await send_whatsapp_message(user_id, safe_reply)
-                history.append({"role": "assistant", "content": reply})
-                user_memory[user_id] = history
+                
+                # Save assistant message to history
+                assistant_message = {"role": "assistant", "content": reply}
+                save_message_to_history(user_id, assistant_message, user_memory)
+                
                 return {"ok": True}
 
         if ai_message.content:
             reply = ai_message.content.strip()
             safe_reply = clean_unicode(reply)
             await send_whatsapp_message(user_id, safe_reply)
-            history.append({"role": "assistant", "content": reply})
-            user_memory[user_id] = history
+            
+            # Save assistant message to history
+            assistant_message = {"role": "assistant", "content": reply}
+            save_message_to_history(user_id, assistant_message, user_memory)
 
     except Exception as e:
         print(f"Error in handle_message: {e}")
@@ -206,6 +232,20 @@ async def receive_whatsapp(request: Request):
 @app.get("/test")
 async def test_page(request: Request):
     return PlainTextResponse("Test page reached!", status_code=200)
+
+@app.get("/test/memory/{user_id}")
+async def test_memory(user_id: str):
+    """Test endpoint to view conversation history for a specific user"""
+    try:
+        history = get_conversation_history(user_id, user_memory)
+        return {
+            "user_id": user_id,
+            "message_count": len(history),
+            "messages": history,
+            "source": "mongodb" if history and user_id not in user_memory else "fallback"
+        }
+    except Exception as e:
+        return {"error": str(e), "user_id": user_id}
 
 @app.get("/auth/google_callback")
 async def auth_callback(request: Request):
