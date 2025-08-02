@@ -76,9 +76,9 @@ def get_tasks(user_id: str, status: str = None, priority: str = None) -> list:
     print(f"Found {len(tasks)} tasks for user {user_id}")
     return tasks
 
-def update_task_status(task_id: str, status: str, user_id: str) -> dict:
-    """Update the status of a specific task"""
-    print(f"Updating task {task_id} status to {status} for user {user_id}")
+def update_task_status(task_id: str = None, task_title: str = None, status: str = None, user_id: str = None) -> dict:
+    """Update the status of a specific task by task_id or task_title"""
+    print(f"Updating task status to {status} for user {user_id}")
     
     # Validate status
     valid_statuses = ["pending", "in_progress", "completed"]
@@ -86,29 +86,56 @@ def update_task_status(task_id: str, status: str, user_id: str) -> dict:
         print(f"Invalid status: {status}. Valid options: {valid_statuses}")
         return None
     
+    if user_id is None:
+        raise ValueError("Missing user_id in update_task_status() call!")
+    
+    # Find user document first
+    user_doc = task_list_collection.find_one({"user_id": user_id})
+    if not user_doc or "tasks" not in user_doc:
+        print(f"No tasks found for user {user_id}")
+        return None
+    
+    # Find the task to update
+    task_to_update = None
+    task_index = None
+    
+    for i, task in enumerate(user_doc["tasks"]):
+        if task_id and task.get("task_id") == task_id:
+            task_to_update = task
+            task_index = i
+            break
+        elif task_title and task_title.lower() in task.get("title", "").lower():
+            task_to_update = task
+            task_index = i
+            break
+    
+    if not task_to_update:
+        print(f"Task not found for user {user_id}")
+        return None
+    
     tz = pytz.timezone("Asia/Kuala_Lumpur")
     now = datetime.now(tz)
     
-    # Update specific task in the array
+    # Update specific task in the array using array index
     result = task_list_collection.update_one(
-        {"user_id": user_id, "tasks.task_id": task_id},
+        {"user_id": user_id},
         {
             "$set": {
-                "tasks.$.status": status,
-                "tasks.$.updated_at": now,
+                f"tasks.{task_index}.status": status,
+                f"tasks.{task_index}.updated_at": now,
                 "updated_at": now
             }
         }
     )
     
     if result.modified_count > 0:
-        print(f"Task {task_id} updated successfully")
+        print(f"Task updated successfully")
         # Return the updated task
-        user_doc = task_list_collection.find_one({"user_id": user_id})
-        updated_task = next((task for task in user_doc["tasks"] if task["task_id"] == task_id), None)
-        return updated_task
+        task_to_update["status"] = status
+        task_to_update["updated_at"] = now
+        return task_to_update
     else:
-        print(f"Task {task_id} not found or update failed")
+        print(f"Task update failed")
         return None
 
 create_task_tool = {
@@ -163,20 +190,20 @@ update_task_status_tool = {
     "type": "function",
     "function": {
         "name": "update_task_status",
-        "description": "Updates the status of a specific task.",
+        "description": "Updates the status of a specific task by title or ID.",
         "parameters": {
             "type": "object",
             "properties": {
-                "task_id": {
+                "task_title": {
                     "type": "string",
-                    "description": "The unique task_id of the task to update"
+                    "description": "The title or partial title of the task to update"
                 },
                 "status": {
                     "type": "string",
                     "description": "New status: 'pending', 'in_progress', or 'completed'"
                 }
             },
-            "required": ["task_id", "status"]
+            "required": ["task_title", "status"]
         }
     }
 }

@@ -233,25 +233,24 @@ async def receive_whatsapp(request: Request):
                         else:
                             reply_lines = ["📝 Your Tasks:"]
                             for task in tasks:
-                                # Status emojis
-                                status_emoji = "✅" if task["status"] == "completed" else "🔄" if task["status"] == "in_progress" else "⏳"
+                                # Status text
+                                status_text = task["status"].replace("_", " ").title()
                                 # Priority emojis
                                 priority_emoji = "🔴" if task["priority"] == "high" else "🟡" if task["priority"] == "medium" else "🟢"
-                                reply_lines.append(f"{status_emoji} {priority_emoji} {task['title']} (ID: {task['task_id'][:8]})")
+                                reply_lines.append(f"{priority_emoji} {task['title']} - {status_text}")
                                 if task.get('description'):
                                     reply_lines.append(f"   📄 {task['description']}")
                             reply = "\n".join(reply_lines)
 
                     elif function_name == "update_task_status":
                         result = update_task_status(
-                            task_id=args["task_id"],
+                            task_title=args["task_title"],
                             status=args["status"],
                             user_id=user_id
                         )
                         if result:
-                            status_emoji = "✅" if args["status"] == "completed" else "🔄" if args["status"] == "in_progress" else "⏳"
                             reply = (
-                                f"{status_emoji} Task Updated\n\n"
+                                f"✅ Task Updated\n\n"
                                 f"Title: {result['title']}\n"
                                 f"Status: {args['status'].replace('_', ' ').title()}"
                             )
