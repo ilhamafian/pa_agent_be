@@ -27,6 +27,10 @@ from tools.reminder import (
     create_custom_reminder,
     list_reminders
 )
+from tools.task import (
+    create_task_tool,
+    create_task
+)
 from tools.scheduler import start_scheduler
 from utils.utils import clean_unicode, send_whatsapp_message, get_auth_url
 from db.mongo import (
@@ -68,7 +72,7 @@ app.add_middleware(
 executor = ThreadPoolExecutor()
 # Keep user_memory as fallback for when MongoDB is unavailable
 user_memory = {}
-tools = [create_event_tool, get_events_tool, create_event_reminder_tool, create_custom_reminder_tool, list_reminders_tool]
+tools = [create_event_tool, get_events_tool, create_event_reminder_tool, create_custom_reminder_tool, list_reminders_tool, create_task_tool]
 
 now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
 today_str = now.strftime("%Y-%m-%d")
@@ -198,6 +202,20 @@ async def receive_whatsapp(request: Request):
                     elif function_name == "list_reminders":
                         result = list_reminders(user_id=user_id)
                         reply = result["message"]
+
+                    elif function_name == "create_task":
+                        result = create_task(
+                            title=args["title"],
+                            date=args["date"],
+                            description=args.get("description"),
+                            user_id=user_id
+                        )
+                        reply = (
+                            f"✅ Task Created\n\n"
+                            f"Title: {args['title']}\n"
+                            f"Date: {args['date']}\n"
+                            f"Status: Pending"
+                        )
 
                     else:
                         reply = "❌ Unknown function requested."
