@@ -1,3 +1,4 @@
+import hashlib
 import httpx
 import os
 import json
@@ -19,6 +20,10 @@ redirect_uri = f"{APP_URL}/auth/google_callback"
 
 def clean_unicode(text):
     return text.encode("utf-8", errors="replace").decode("utf-8")
+
+def hash_data(data: str) -> str:
+    """Hash sensitive data using SHA-256"""
+    return hashlib.sha256(data.encode()).hexdigest()
 
 async def send_whatsapp_message(recipient_id: str, message: str):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"

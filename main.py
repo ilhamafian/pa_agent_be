@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from google_auth_oauthlib.flow import Flow
+from user import router as user_router
 
 # Internal Imports
 from tools.calendar import (
@@ -61,7 +62,7 @@ app = FastAPI()
 # === Middleware ===
 origins = [
     "http://localhost:5173",
-    "http://localhost:3000",
+    "https://pa-agent-fe.vercel.app"
 ]
 
 app.add_middleware(
@@ -369,6 +370,9 @@ async def auth_callback(request: Request):
         url="https://pa-agent-fe.vercel.app/auth-result?status=success",
         status_code=303
     )
+
+# Register your user API routes
+app.include_router(user_router)
 
 # === Start Scheduler ===
 start_scheduler()
