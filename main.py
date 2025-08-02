@@ -29,7 +29,11 @@ from tools.reminder import (
 )
 from tools.task import (
     create_task_tool,
-    create_task
+    get_tasks_tool,
+    update_task_status_tool,
+    create_task,
+    get_tasks,
+    update_task_status
 )
 from tools.scheduler import start_scheduler
 from utils.utils import clean_unicode, send_whatsapp_message, get_auth_url
@@ -72,7 +76,7 @@ app.add_middleware(
 executor = ThreadPoolExecutor()
 # Keep user_memory as fallback for when MongoDB is unavailable
 user_memory = {}
-tools = [create_event_tool, get_events_tool, create_event_reminder_tool, create_custom_reminder_tool, list_reminders_tool, create_task_tool]
+tools = [create_event_tool, get_events_tool, create_event_reminder_tool, create_custom_reminder_tool, list_reminders_tool, create_task_tool, get_tasks_tool, update_task_status_tool]
 
 now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
 today_str = now.strftime("%Y-%m-%d")
@@ -206,16 +210,53 @@ async def receive_whatsapp(request: Request):
                     elif function_name == "create_task":
                         result = create_task(
                             title=args["title"],
-                            date=args["date"],
+                            priority=args.get("priority", "medium"),
                             description=args.get("description"),
                             user_id=user_id
                         )
+                        priority_emoji = "🔴" if args.get("priority") == "high" else "🟡" if args.get("priority") == "medium" else "🟢"
                         reply = (
                             f"✅ Task Created\n\n"
                             f"Title: {args['title']}\n"
-                            f"Date: {args['date']}\n"
+                            f"Priority: {priority_emoji} {args.get('priority', 'medium').title()}\n"
                             f"Status: Pending"
                         )
+
+                    elif function_name == "get_tasks":
+                        tasks = get_tasks(
+                            user_id=user_id,
+                            status=args.get("status"),
+                            priority=args.get("priority")
+                        )
+                        if not tasks:
+                            reply = "📝 You have no tasks."
+                        else:
+                            reply_lines = ["📝 Your Tasks:"]
+                            for task in tasks:
+                                # Status emojis
+                                status_emoji = "✅" if task["status"] == "completed" else "🔄" if task["status"] == "in_progress" else "⏳"
+                                # Priority emojis
+                                priority_emoji = "🔴" if task["priority"] == "high" else "🟡" if task["priority"] == "medium" else "🟢"
+                                reply_lines.append(f"{status_emoji} {priority_emoji} {task['title']} (ID: {task['task_id'][:8]})")
+                                if task.get('description'):
+                                    reply_lines.append(f"   📄 {task['description']}")
+                            reply = "\n".join(reply_lines)
+
+                    elif function_name == "update_task_status":
+                        result = update_task_status(
+                            task_id=args["task_id"],
+                            status=args["status"],
+                            user_id=user_id
+                        )
+                        if result:
+                            status_emoji = "✅" if args["status"] == "completed" else "🔄" if args["status"] == "in_progress" else "⏳"
+                            reply = (
+                                f"{status_emoji} Task Updated\n\n"
+                                f"Title: {result['title']}\n"
+                                f"Status: {args['status'].replace('_', ' ').title()}"
+                            )
+                        else:
+                            reply = "❌ Task not found or update failed."
 
                     else:
                         reply = "❌ Unknown function requested."
