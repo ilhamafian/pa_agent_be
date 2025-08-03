@@ -1,13 +1,21 @@
 # app/user.py
-
-from fastapi import APIRouter, HTTPException
+import hashlib
+import os
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from typing import List
-import hashlib
-from datetime import datetime
+from dotenv import load_dotenv
+from datetime import datetime, timedelta
+from jose import jwt
 import pytz
+from bson import ObjectId
 from db.mongo import client
 from utils.utils import hash_data
+
+load_dotenv()
+SECRET_KEY = os.getenv("TOKEN_SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 day
 
 router = APIRouter()
 
@@ -32,6 +40,15 @@ class UserPayload(BaseModel):
 class UserLoginPayload(BaseModel):
     PIN: int
     phone_number: int
+
+class LogoutPayload(BaseModel):
+    phone_number: str
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 @router.post("/user_onboarding")
 async def create_user(data: UserPayload):
@@ -64,16 +81,17 @@ async def create_user(data: UserPayload):
         }
         
         # Check if user already exists (by hashed phone number)
-        existing_user = users_collection.find_one({"phone_number": hashed_phone})
-        if existing_user:
+        if check_phone_number_exist(data.phone_number):
             raise HTTPException(status_code=400, detail="User with this phone number already exists")
         
         # Insert user into MongoDB
         result = users_collection.insert_one(user_doc)
         
         print(f"User created with ID: {result.inserted_id}")
-        
+
+        token = create_access_token(data={"user_id": str(result.inserted_id)})
         return {
+            "token": token,
             "message": "User created successfully",
             "user_id": str(result.inserted_id),
             "nickname": data.nickname,
@@ -84,7 +102,7 @@ async def create_user(data: UserPayload):
         print(f"Error creating user: {e}")
         raise HTTPException(status_code=500, detail="Failed to create user")
 
-@router.post("/user_login")
+@router.post("/login")
 async def login_user(data: UserLoginPayload):
     print(f"Received login attempt for phone: {data.phone_number}")
     
@@ -117,8 +135,10 @@ async def login_user(data: UserLoginPayload):
         print(f"Successful login for user: {user.get('nickname', 'Unknown')}")
         
         # Return success response (excluding sensitive data)
+        token = create_access_token(data={"user_id": str(user["_id"])})
         return {
             "message": "Login successful",
+            "token": token,
             "user_id": str(user["_id"]),
             "nickname": user["nickname"],
             "email": user["email"],
@@ -131,4 +151,49 @@ async def login_user(data: UserLoginPayload):
     except Exception as e:
         print(f"Error during login: {e}")
         raise HTTPException(status_code=500, detail="Login failed")
-     
+
+@router.post("/check_phone_number_exist", status_code=status.HTTP_200_OK)
+async def check_phone_number_exist(data: dict):
+    try:
+        phone_number = data.get("phone_number")
+        print(f"Checking phone number: {phone_number}")
+        if not phone_number:
+            raise HTTPException(status_code=400, detail="Invalid phone number")
+
+        hashed_phone = hash_data(phone_number)
+        user = users_collection.find_one({"phone_number": hashed_phone})
+
+        return {"exists": bool(user)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] /check_user_exist: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Something went wrong while checking user existence."
+        )
+
+@router.post("/logout")
+async def logout(data: LogoutPayload):
+    print(f"Logging out user for phone: {data.phone_number}")
+
+    try:
+        hashed_phone = hash_data(data.phone_number)
+        
+        result = users_collection.update_one(
+            {"phone_number": hashed_phone},
+            {"$set": {"last_login": None}}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return {"message": "✅ User logged out successfully"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error during logout: {e}")
+        raise HTTPException(status_code=500, detail="❌ Logout failed")
+    
