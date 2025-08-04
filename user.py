@@ -50,6 +50,12 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+def _check_phone_number_exists(phone_number: int) -> bool:
+    """Utility function to check if a phone number exists in the database"""
+    hashed_phone = hash_data(str(phone_number))
+    user = users_collection.find_one({"phone_number": hashed_phone})
+    return bool(user)
+
 @router.post("/user_onboarding")
 async def create_user(data: UserPayload):
     print(f"Received user: {data}")
@@ -81,7 +87,7 @@ async def create_user(data: UserPayload):
         }
         
         # Check if user already exists (by hashed phone number)
-        if check_phone_number_exist(data.phone_number):
+        if _check_phone_number_exists(data.phone_number):
             raise HTTPException(status_code=400, detail="User with this phone number already exists")
         
         # Insert user into MongoDB
@@ -160,7 +166,7 @@ async def check_phone_number_exist(data: dict):
         if not phone_number:
             raise HTTPException(status_code=400, detail="Invalid phone number")
 
-        hashed_phone = hash_data(phone_number)
+        hashed_phone = hash_data(str(phone_number))
         user = users_collection.find_one({"phone_number": hashed_phone})
 
         return {"exists": bool(user)}
