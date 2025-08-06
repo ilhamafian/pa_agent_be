@@ -154,19 +154,35 @@ async def assistant_response(sender: str, text: str):
                             status=args.get("status"),
                             priority=args.get("priority")
                         )
+                        
                         if not tasks:
-                            reply = "📝 You have no tasks."
+                            reply = "📝 You have no tasks at the moment."
                         else:
-                            reply_lines = ["📝 Your Tasks:"]
-                            for task in tasks:
-                                # Status text
+                            reply_lines = ["🗂️ *Your Tasks:*"]
+                            
+                            for idx, task in enumerate(tasks, start=1):
+                                # Clean status
                                 status_text = task["status"].replace("_", " ").title()
-                                # Priority emojis
-                                priority_emoji = "🔴" if task["priority"] == "high" else "🟡" if task["priority"] == "medium" else "🟢"
-                                reply_lines.append(f"{priority_emoji} {task['title']} - {status_text}")
-                                if task.get('description'):
+                                
+                                # Priority emoji
+                                priority = task.get("priority", "").lower()
+                                priority_emoji = {
+                                    "high": "🔴 High",
+                                    "medium": "🟡 Medium",
+                                    "low": "🟢 Low"
+                                }.get(priority, "⚪ Unknown")
+                                
+                                # Task entry
+                                reply_lines.append(f"*{idx}. {task['title']}*")
+                                reply_lines.append(f"   📌 Status: _{status_text}_")
+                                reply_lines.append(f"   🎯 Priority: {priority_emoji}")
+                                
+                                if task.get("description"):
                                     reply_lines.append(f"   📄 {task['description']}")
-                            reply = "\n".join(reply_lines)
+                                
+                                reply_lines.append("")  # Add blank line for spacing
+                            
+                            reply = "\n".join(reply_lines).strip()
 
                     elif function_name == "update_task_status":
                         result = update_task_status(
