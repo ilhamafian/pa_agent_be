@@ -177,7 +177,7 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None) -> dict:
             "TIMEZONE": "Asia/Kuala_Lumpur",
             "RETURN_AS_TIMEZONE_AWARE": True,
             "RELATIVE_BASE": now,
-            "PREFER_FUTURE": True
+            "PREFER_DATES_FROM": "future"
         }
     )
     
@@ -192,7 +192,7 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None) -> dict:
                 "TIMEZONE": "Asia/Kuala_Lumpur",
                 "RETURN_AS_TIMEZONE_AWARE": True,
                 "RELATIVE_BASE": now,
-                "PREFER_FUTURE": True
+                "PREFER_DATES_FROM": "future"
             }
         )
         print(f"[DEBUG] Fallback parsed time: {reminder_time}")

@@ -50,13 +50,13 @@ def create_task(title: str = None, priority: str = "medium", user_id=None, descr
     return task
 
 def get_tasks(user_id: str, status: str = None, priority: str = None) -> list:
-    """Get all tasks for a user, optionally filtered by status and/or priority"""
-    if user_id is None:
-        raise ValueError("Missing user_id in get_tasks() call!")
+    """Get all tasks for a user, optionally filtered by status and/or priority.
+    If status is 'completed', return only the latest 5 completed tasks.
+    If no status is given, return all tasks but limit completed ones to latest 5.
+    """
     
     print("Getting tasks for user_id:", user_id)
     
-    # Find user document
     user_doc = task_list_collection.find_one({"user_id": user_id})
     
     if not user_doc or "tasks" not in user_doc:
@@ -64,17 +64,32 @@ def get_tasks(user_id: str, status: str = None, priority: str = None) -> list:
         return []
     
     tasks = user_doc["tasks"]
-    
-    # Filter by status if provided
-    if status:
-        tasks = [task for task in tasks if task.get("status") == status]
-    
-    # Filter by priority if provided
+
+    # Apply priority filter first if given
     if priority:
         tasks = [task for task in tasks if task.get("priority") == priority]
-    
-    print(f"Found {len(tasks)} tasks for user {user_id}")
+
+    if status:
+        # Filter and possibly limit completed tasks
+        tasks = [task for task in tasks if task.get("status") == status]
+        if status == "completed":
+            tasks.sort(key=lambda task: task.get("updated_at") or task.get("created_at") or "", reverse=True)
+            tasks = tasks[:5]
+    else:
+        # Group tasks by status
+        pending = [task for task in tasks if task.get("status") == "pending"]
+        in_progress = [task for task in tasks if task.get("status") == "in_progress"]
+        completed = [task for task in tasks if task.get("status") == "completed"]
+        
+        # Limit completed tasks to latest 5
+        completed.sort(key=lambda task: task.get("updated_at") or task.get("created_at") or "", reverse=True)
+        completed = completed[:5]
+
+        tasks = pending + in_progress + completed
+
+    print(f"Returning {len(tasks)} tasks for user {user_id}")
     return tasks
+
 
 def update_task_status(task_id: str = None, task_title: str = None, status: str = None, user_id: str = None) -> dict:
     """Update the status of a specific task by task_id or task_title"""

@@ -188,7 +188,12 @@ async def assistant_response(sender: str, text: str):
 
                 except AuthRequiredError:
                     auth_url = get_auth_url(user_id)
-                    reply = f"🔐 Please authorize access to your calendar:\n{auth_url}"
+                    reply = (
+                        f"🔐 Oops! It seems like you haven't given me access to your calendar yet. "
+                        f"Please authorize access through this link:\n{auth_url}\n\n"
+                        f"Alternatively, you can manage your external application integration through your dashboard:\n"
+                        f"https://lofy-assistant.vercel.app/dashboard/integration"
+                    )
 
                 safe_reply = clean_unicode(reply)
                 await send_whatsapp_message(user_id, safe_reply)
