@@ -75,6 +75,82 @@ def create_event(time: str = None, end_time: str = None, date: str = None, title
     print('Event created:', event.get('htmlLink'))
     return event
 
+def update_event(user_id=None, original_title=None, new_title=None, new_date=None, new_start_time=None, new_end_time=None, new_description=None):
+    """
+    Update an existing Google Calendar event by searching it with original_title (and optionally date).
+    You can update title, date, time, and description.
+
+    Parameters:
+    - user_id: user identifier for OAuth token lookup (required)
+    - original_title: the title of the event to find (required)
+    - new_title: new title to update to (optional)
+    - new_date: new date in YYYY-MM-DD format (optional)
+    - new_start_time: new start time in HH:MM 24-hour format (optional)
+    - new_end_time: new end time in HH:MM 24-hour format (optional)
+    - new_description: new description (optional)
+    """
+    if user_id is None or original_title is None:
+        raise ValueError("user_id and original_title are required")
+
+    token_data = oauth_tokens_collection.find_one({"user_id": user_id})
+    if not token_data:
+        raise AuthRequiredError("AUTH_REQUIRED")
+
+    creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+    # Define a time window to search for the event, e.g., +/- 7 days around new_date or today if new_date is None
+    tz = pytz.timezone("Asia/Kuala_Lumpur")
+    if new_date:
+        start_search = datetime.strptime(new_date, "%Y-%m-%d").replace(tzinfo=tz) - timedelta(days=7)
+        end_search = datetime.strptime(new_date, "%Y-%m-%d").replace(tzinfo=tz) + timedelta(days=7)
+    else:
+        now = datetime.now(tz)
+        start_search = now - timedelta(days=7)
+        end_search = now + timedelta(days=7)
+
+    events_result = service.events().list(
+        calendarId='primary',
+        timeMin=start_search.isoformat(),
+        timeMax=end_search.isoformat(),
+        q=original_title,
+        singleEvents=True,
+        orderBy='startTime'
+    ).execute()
+
+    events = events_result.get("items", [])
+    if not events:
+        return f"❌ No event found with title '{original_title}' in the search range."
+
+    # For demo, pick the first matched event (you can enhance by matching exact title or other criteria)
+    event = events[0]
+
+    # Update fields if provided
+    if new_title:
+        event['summary'] = new_title
+    if new_description is not None:
+        event['description'] = new_description
+
+    # If new date/time provided, update start and end accordingly
+    if new_date and new_start_time and new_end_time:
+        start_datetime = f"{new_date}T{new_start_time}:00"
+        end_datetime = f"{new_date}T{new_end_time}:00"
+        event['start'] = {'dateTime': start_datetime, 'timeZone': 'Asia/Kuala_Lumpur'}
+        event['end'] = {'dateTime': end_datetime, 'timeZone': 'Asia/Kuala_Lumpur'}
+    elif new_date:
+        # If only date, treat as all-day event
+        event['start'] = {'date': new_date}
+        event['end'] = {'date': new_date}
+
+    updated_event = service.events().update(
+        calendarId='primary',
+        eventId=event['id'],
+        body=event
+    ).execute()
+
+    return f"✅ Event updated: {updated_event.get('htmlLink')}"
+
+
 def get_events(natural_range="today", user_id=None): 
     print("Entered get_events")
     print(f"[DEBUG] natural_range input: {natural_range}")
@@ -214,6 +290,49 @@ create_event_tool = {
         }
     }
 }
+
+update_event_tool = {
+    "type": "function",
+    "function": {
+        "name": "update_event",
+        "description": "Updates an existing calendar event by searching with the original title and optionally date. You can update the title, date, start/end times, and description.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "description": "User identifier for OAuth token lookup"
+                },
+                "original_title": {
+                    "type": "string",
+                    "description": "The original title of the event to find and update"
+                },
+                "new_title": {
+                    "type": "string",
+                    "description": "New title to update the event to"
+                },
+                "new_date": {
+                    "type": "string",
+                    "description": "New date of the event in YYYY-MM-DD format"
+                },
+                "new_start_time": {
+                    "type": "string",
+                    "description": "New start time (24-hour format, e.g., 09:00)"
+                },
+                "new_end_time": {
+                    "type": "string",
+                    "description": "New end time (24-hour format, e.g., 10:00)"
+                },
+                "new_description": {
+                    "type": "string",
+                    "description": "New description or notes about the event"
+                }
+            },
+            "required": ["user_id", "original_title"]
+        }
+    }
+}
+
 
 get_events_tool = {
     "type": "function",

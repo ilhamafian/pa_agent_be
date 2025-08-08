@@ -12,8 +12,10 @@ from db.mongo import get_conversation_history, save_message_to_history
 from tools.calendar import (
     create_event_tool,
     get_events_tool,
+    update_event_tool,
     create_event,
     get_events,
+    update_event,
     AuthRequiredError
 )
 from tools.reminder import (
@@ -40,7 +42,17 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 APP_URL = os.getenv("APP_URL")
 
 user_memory = {}
-tools = [create_event_tool, get_events_tool, create_event_reminder_tool, create_custom_reminder_tool, list_reminders_tool, create_task_tool, get_tasks_tool, update_task_status_tool]
+tools = [
+    create_event_tool,
+    get_events_tool,
+    update_event_tool,
+    create_event_reminder_tool,
+    create_custom_reminder_tool,
+    list_reminders_tool,
+    create_task_tool,
+    get_tasks_tool,
+    update_task_status_tool,
+]
 
 now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
 today_str = now.strftime("%Y-%m-%d")
@@ -214,6 +226,18 @@ async def assistant_response(sender: str, text: str):
                         else:
                             reply = "❌ Task not found or update failed."
 
+                    elif function_name == "update_event":
+                        result = update_event(
+                            user_id=user_id,
+                            original_title=args["original_title"],
+                            new_title=args.get("new_title"),
+                            new_date=args.get("new_date"),
+                            new_start_time=args.get("new_start_time"),
+                            new_end_time=args.get("new_end_time"),
+                            new_description=args.get("new_description")
+                        )
+                        reply = result
+
                     else:
                         reply = "❌ Unknown function requested."
 
@@ -222,7 +246,7 @@ async def assistant_response(sender: str, text: str):
                     reply = (
                         f"🔐 Oops! It seems like you haven't given me access to your calendar yet. "
                         f"Please authorize access through this link:\n{auth_url}\n\n"
-                        f"Alternatively, you can manage your external application integration through your dashboard:\n"
+                        f"Alternatively, you can manage your external app integration through your dashboard:\n"
                         f"https://lofy-assistant.vercel.app/dashboard/integration"
                     )
 
