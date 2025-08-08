@@ -148,7 +148,28 @@ def update_event(user_id=None, original_title=None, new_title=None, new_date=Non
         body=event
     ).execute()
 
-    return f"✅ Event updated: {updated_event.get('htmlLink')}"
+    # Format date/time for display
+    def format_datetime(dt):
+        if 'dateTime' in dt:
+            dt_obj = datetime.fromisoformat(dt['dateTime'])
+            return dt_obj.strftime("%Y-%m-%d %H:%M")
+        elif 'date' in dt:
+            return dt['date']
+        else:
+            return "Unknown"
+
+    title = updated_event.get('summary', 'No Title')
+    start_str = format_datetime(updated_event.get('start', {}))
+    end_str = format_datetime(updated_event.get('end', {}))
+    time_str = f"{start_str} to {end_str}" if start_str != end_str else start_str
+    link = updated_event.get('htmlLink', 'No Link')
+
+    return (
+        f"✅ Event Updated\n\n"
+        f"Title: {title}\n"
+        f"Date & Time: {time_str}\n"
+        f"Link: {link}"
+    )
 
 
 def get_events(natural_range="today", user_id=None): 
