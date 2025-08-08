@@ -93,11 +93,18 @@ def get_events(natural_range="today", user_id=None):
 
     natural_range = natural_range.strip().lower()
     
-   # Try parsing the range naturally (e.g., "tomorrow", "next week")
+    # Try parsing the range naturally (e.g., "tomorrow", "next week", weekday names)
     date_range = dateparser.parse(
         natural_range,
-        settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True}
+        settings={
+            "TIMEZONE": "Asia/Kuala_Lumpur",
+            "RETURN_AS_TIMEZONE_AWARE": True,
+            "PREFER_DATES_FROM": "future",
+        }
     )
+    # If a weekday parsed to a past date relative to now, bump to next week
+    if date_range and date_range < now:
+        date_range = date_range + timedelta(days=7)
     print(f"[DEBUG] Parsed date_range: {date_range}")
 
     # Check if input looks like a month (e.g., "july 2025")
