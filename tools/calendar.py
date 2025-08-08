@@ -124,9 +124,10 @@ def get_events(natural_range="today", user_id=None):
         print(f"[DEBUG] Range match -> start: {start_time}, end: {end_time}")
 
     elif date_range:
-        start_time = date_range
-        end_time = start_time + timedelta(days=1)
-        print(f"[DEBUG] Single day match -> start: {start_time}, end: {end_time}")
+        # Normalize to full-day window in Asia/Kuala_Lumpur
+        start_time = date_range.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = start_time + timedelta(days=1) - timedelta(seconds=1)
+        print(f"[DEBUG] Single day match (normalized) -> start: {start_time}, end: {end_time}")
 
     else:
         print(f"[DEBUG] Failed to parse: {natural_range}")
@@ -152,17 +153,22 @@ def get_events(natural_range="today", user_id=None):
     reply_lines = [f"📅 Events for '{natural_range}':"]
     for event in events:
         title = event.get("summary", "No Title")
-        start = event["start"].get("dateTime", event["start"].get("date"))
-        end = event["end"].get("dateTime", event["end"].get("date"))
+        start_dt_str = event["start"].get("dateTime")
+        end_dt_str = event["end"].get("dateTime")
+        all_day_start = event["start"].get("date") is not None
+        all_day_end = event["end"].get("date") is not None
 
-        print(f"[DEBUG] Event raw -> title: {title}, start: {start}, end: {end}")
+        print(f"[DEBUG] Event raw -> title: {title}, start: {start_dt_str or event['start'].get('date')}, end: {end_dt_str or event['end'].get('date')}")
 
-        try:
-            start_dt = datetime.fromisoformat(start)
-            end_dt = datetime.fromisoformat(end)
-            time_range = f"{start_dt.strftime('%a %-I:%M%p')} until {end_dt.strftime('%-I:%M%p')}"
-        except ValueError:
+        if all_day_start or all_day_end:
             time_range = "All-day"
+        else:
+            try:
+                start_dt = datetime.fromisoformat(start_dt_str)
+                end_dt = datetime.fromisoformat(end_dt_str)
+                time_range = f"{start_dt.strftime('%a %-I:%M%p')} until {end_dt.strftime('%-I:%M%p')}"
+            except Exception:
+                time_range = "All-day"
 
         reply_lines.append(f"{title} - {time_range}")
 
