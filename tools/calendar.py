@@ -39,7 +39,7 @@ def create_event(time: str = None, end_time: str = None, date: str = None, title
         scopes=token_data["token"]["scopes"],
     )
 
-    service = build('calendar', 'v3', credentials=creds)
+    service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
 
     if time and end_time:
         # Timed event
@@ -85,7 +85,7 @@ def get_events(natural_range="today", user_id=None):
         raise AuthRequiredError("AUTH_REQUIRED")
 
     creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-    service = build("calendar", "v3", credentials=creds)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
     tz = pytz.timezone("Asia/Kuala_Lumpur")
     now = datetime.now(tz)

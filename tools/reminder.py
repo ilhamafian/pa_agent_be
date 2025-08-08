@@ -10,7 +10,7 @@ from googleapiclient.discovery import build
 from db.mongo import oauth_tokens_collection
 from pymongo import MongoClient
 from apscheduler.schedulers.background import BackgroundScheduler
-from utils.utils import send_whatsapp_message, event_loop
+from utils.utils import send_whatsapp_message, get_event_loop
 from bson import ObjectId
 
 load_dotenv()
@@ -56,7 +56,7 @@ def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=No
     else:
         # If no specific time provided, we'll need to find the event in their calendar
         creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-        service = build("calendar", "v3", credentials=creds)
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
         
         # Search for the event in their calendar (next 30 days)
         now = datetime.now(pytz.timezone("Asia/Kuala_Lumpur"))
@@ -267,10 +267,12 @@ def send_reminder(reminder_id: str):
         print(f"[REMINDER] Sending reminder to user {user_id}: {message}")
         
         # Send WhatsApp message
-        asyncio.run_coroutine_threadsafe(
-            send_whatsapp_message(user_id, message),
-            event_loop
-        )
+        loop = get_event_loop()
+        if loop:
+            asyncio.run_coroutine_threadsafe(
+                send_whatsapp_message(user_id, message),
+                loop
+            )
         
         # Mark reminder as sent
         reminders_collection.update_one(

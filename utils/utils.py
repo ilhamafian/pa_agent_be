@@ -69,6 +69,23 @@ def get_auth_url(user_id):
 
     return auth_url
 
-event_loop = asyncio.new_event_loop()
-asyncio.set_event_loop(event_loop)
-threading.Thread(target=event_loop.run_forever, daemon=True).start()
+# Background asyncio event loop managed in its own thread
+# Expose a getter to safely retrieve it at runtime
+event_loop = None
+event_loop_ready = threading.Event()
+
+def _run_bg_loop():
+    global event_loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    event_loop = loop
+    event_loop_ready.set()
+    loop.run_forever()
+
+threading.Thread(target=_run_bg_loop, daemon=True).start()
+
+def get_event_loop():
+    if event_loop is None:
+        # Wait briefly for the background loop to initialize
+        event_loop_ready.wait(timeout=5)
+    return event_loop

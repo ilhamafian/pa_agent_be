@@ -9,7 +9,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 from db.mongo import get_all_users, oauth_tokens_collection
-from utils.utils import send_whatsapp_message, event_loop
+from utils.utils import send_whatsapp_message, get_event_loop
 from tools.task import get_tasks
 
 load_dotenv()
@@ -30,7 +30,7 @@ def get_events_for_user_on_date(user_id, target_date):
         return []
 
     creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-    service = build("calendar", "v3", credentials=creds)
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
     tz = pytz.timezone("Asia/Kuala_Lumpur")
     start_time = tz.localize(datetime.combine(target_date, datetime.min.time()))
@@ -175,10 +175,12 @@ def start_scheduler():
                     message = format_combined_reminder(events, all_active_tasks, tomorrow)
                     print(f"[REMINDER JOB] Sending combined reminder to user {user_id}:")
                     print(message)
-                    asyncio.run_coroutine_threadsafe(
-                        send_whatsapp_message(user_id, message),
-                        event_loop
-                    )
+                    loop = get_event_loop()
+                    if loop:
+                        asyncio.run_coroutine_threadsafe(
+                            send_whatsapp_message(user_id, message),
+                            loop
+                        )
                 else:
                     print(f"[REMINDER JOB] No events or active tasks to notify for user {user_id}.")
         except Exception as e:
