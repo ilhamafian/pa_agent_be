@@ -158,30 +158,45 @@ async def assistant_response(sender: str, text: str):
                         if not tasks:
                             reply = "📝 You have no tasks at the moment."
                         else:
-                            reply_lines = ["🗂️ *Your Tasks:*"]
-                            
-                            for idx, task in enumerate(tasks, start=1):
-                                # Clean status
-                                status_text = task["status"].replace("_", " ").title()
-                                
-                                # Priority emoji
-                                priority = task.get("priority", "").lower()
-                                priority_emoji = {
-                                    "high": "🔴 High",
-                                    "medium": "🟡 Medium",
-                                    "low": "🟢 Low"
-                                }.get(priority, "⚪ Unknown")
-                                
-                                # Task entry
-                                reply_lines.append(f"*{idx}. {task['title']}*")
-                                reply_lines.append(f"   📌 Status: _{status_text}_")
-                                reply_lines.append(f"   🎯 Priority: {priority_emoji}")
-                                
-                                if task.get("description"):
-                                    reply_lines.append(f"   📄 {task['description']}")
-                                
-                                reply_lines.append("")  # Add blank line for spacing
-                            
+                            # Group tasks by status
+                            pending_tasks = [t for t in tasks if t.get("status") == "pending"]
+                            in_progress_tasks = [t for t in tasks if t.get("status") == "in_progress"]
+                            completed_tasks = [t for t in tasks if t.get("status") == "completed"]
+
+                            reply_lines = ["🗂 Your Tasks:"]
+
+                            sections = [
+                                ("📋 Pending", pending_tasks),
+                                ("⚙️ In Progress", in_progress_tasks),
+                                ("✅ Completed", completed_tasks),
+                            ]
+
+                            for section_title, section_tasks in sections:
+                                if not section_tasks:
+                                    continue
+
+                                reply_lines.append(section_title)
+                                reply_lines.append("─" * len(section_title))
+
+                                for idx, task in enumerate(section_tasks, start=1):
+                                    # Priority emoji
+                                    priority = task.get("priority", "").lower()
+                                    priority_emoji = {
+                                        "high": "🔴 High",
+                                        "medium": "🟡 Medium",
+                                        "low": "🟢 Low",
+                                    }.get(priority, "⚪ Unknown")
+
+                                    reply_lines.append(f"{idx}. {task['title']}")
+                                    reply_lines.append(f"   🎯 Priority: {priority_emoji}")
+
+                                    if task.get("description"):
+                                        reply_lines.append(f"   📄 {task['description']}")
+
+                                    reply_lines.append("")  # Blank line after each task
+
+                                reply_lines.append("")  # Blank line between sections
+
                             reply = "\n".join(reply_lines).strip()
 
                     elif function_name == "update_task_status":
