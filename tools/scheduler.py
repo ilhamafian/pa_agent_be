@@ -99,7 +99,7 @@ def format_combined_reminder(events, tasks, date):
     lines = []
     
     # Add greeting
-    lines.append(f"🌅 Good morning! Here's what's coming up for {date.strftime('%A, %B %d')}:\n")
+    lines.append(f"Your day is wrapped up! Here's what's coming up for tomorrow:\n")
     
     # Add events section
     if events:
@@ -131,14 +131,15 @@ def format_combined_reminder(events, tasks, date):
             priority_emoji = "🔴" if priority == "high" else "🟡" if priority == "medium" else "🟢"
             
             # Status emojis
-            status_emoji = "⏳" if status == "in_progress" else "📋"
+            # status_emoji = "⏳" if status == "in_progress" else "📋"
             
             status_text = "In Progress" if status == "in_progress" else "Pending"
-            lines.append(f"{status_emoji} {priority_emoji} {title} ({status_text})")
+            # lines.append(f"{status_emoji} {priority_emoji} {title} ({status_text})")
+            lines.append(f"{priority_emoji} {title} ({status_text})")
     
     # Add motivational footer
     if events or tasks:
-        lines.append("\n✨ Have a productive day!")
+        lines.append("\n Have a productive day!")
     else:
         lines.append("🎉 You have a free day with no scheduled events or pending tasks!")
     

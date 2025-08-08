@@ -191,7 +191,7 @@ async def assistant_response(sender: str, text: str):
                                     reply_lines.append(f"    Priority: {priority_emoji}")
 
                                     if task.get("description"):
-                                        reply_lines.append(f"   Description: {task['description']}")
+                                        reply_lines.append(f"    Description: {task['description']}")
 
                                     reply_lines.append("")  # Blank line after each task
 
