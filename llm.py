@@ -163,12 +163,12 @@ async def assistant_response(sender: str, text: str):
                             in_progress_tasks = [t for t in tasks if t.get("status") == "in_progress"]
                             completed_tasks = [t for t in tasks if t.get("status") == "completed"]
 
-                            reply_lines = ["🗂 Your Tasks:"]
+                            reply_lines = [""]
 
                             sections = [
-                                ("📋 Pending", pending_tasks),
-                                ("⚙️ In Progress", in_progress_tasks),
-                                ("✅ Completed", completed_tasks),
+                                ("📋 Pending Tasks", pending_tasks),
+                                ("⚙️ In Progress Tasks", in_progress_tasks),
+                                ("✅ Completed Tasks", completed_tasks),
                             ]
 
                             for section_title, section_tasks in sections:
@@ -188,10 +188,10 @@ async def assistant_response(sender: str, text: str):
                                     }.get(priority, "⚪ Unknown")
 
                                     reply_lines.append(f"{idx}. {task['title']}")
-                                    reply_lines.append(f"   🎯 Priority: {priority_emoji}")
+                                    reply_lines.append(f"    Priority: {priority_emoji}")
 
                                     if task.get("description"):
-                                        reply_lines.append(f"   📄 {task['description']}")
+                                        reply_lines.append(f"   Description: {task['description']}")
 
                                     reply_lines.append("")  # Blank line after each task
 
