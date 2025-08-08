@@ -22,6 +22,7 @@ router = APIRouter()
 # MongoDB setup
 db = client["oauth_db"]
 users_collection = db["users"]
+waitlist_collection = db["waitlist"]
 
 class Metadata(BaseModel):
     q1: List[str]
@@ -42,6 +43,9 @@ class UserLoginPayload(BaseModel):
     phone_number: int
 
 class LogoutPayload(BaseModel):
+    phone_number: str
+
+class WaitlistPayload(BaseModel):
     phone_number: str
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
@@ -203,3 +207,17 @@ async def logout(data: LogoutPayload):
         print(f"Error during logout: {e}")
         raise HTTPException(status_code=500, detail="❌ Logout failed")
     
+@router.post("/waitlist")
+async def waitlist(req: WaitlistPayload):
+    phone_number = req.phone_number
+    print(f"Adding to waitlist: {phone_number}")
+
+    try:
+        waitlist_collection.insert_one({"phone_number": phone_number})
+        return {
+            "message": "✅ Added to waitlist successfully",
+            "phone_number": phone_number
+        }
+    except Exception as e:
+        print(f"Error during waitlist: {e}")
+        raise HTTPException(status_code=500, detail="❌ Failed to add to waitlist")

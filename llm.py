@@ -194,7 +194,7 @@ async def assistant_response(sender: str, text: str):
                             reply = (
                                 f"✅ Task Updated\n\n"
                                 f"Title: {result['title']}\n"
-                                f"Status: {args['status'].replace('_', ' ').title()}"
+                                f"Status:   {args['status'].replace('_', ' ').title()}"
                             )
                         else:
                             reply = "❌ Task not found or update failed."
