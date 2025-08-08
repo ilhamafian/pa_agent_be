@@ -183,12 +183,17 @@ def get_events(natural_range="today", user_id=None):
         date_range = date_range + timedelta(days=7)
     print(f"[DEBUG] Parsed date_range: {date_range}")
 
-    # Check if input looks like a month (e.g., "july 2025")
+    # Check if input looks like a month (e.g., "july 2025") but not a specific date
     month_keywords = [
         "january", "february", "march", "april", "may", "june",
         "july", "august", "september", "october", "november", "december"
     ]
-    is_month = any(m in natural_range for m in month_keywords)
+    # Only consider it a month request if:
+    # 1. Contains a month name AND
+    # 2. Does NOT contain day indicators (numbers 1-31, "st", "nd", "rd", "th")
+    has_month = any(m in natural_range for m in month_keywords)
+    has_day_indicator = any(str(i) in natural_range for i in range(1, 32)) or any(suffix in natural_range for suffix in ["st", "nd", "rd", "th"])
+    is_month = has_month and not has_day_indicator
 
     if is_month and date_range:
         start_time = date_range.replace(day=1)
