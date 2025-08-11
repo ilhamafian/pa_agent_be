@@ -8,16 +8,13 @@ from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from db.mongo import oauth_tokens_collection
-from pymongo import MongoClient
-from apscheduler.schedulers.background import BackgroundScheduler
 from utils.utils import send_whatsapp_message, get_event_loop
 from bson import ObjectId
+from db.mongo import client
 
+# Load environment variables first
 load_dotenv()
 
-# MongoDB setup for reminders
-MONGO_URI = os.getenv("MONGO_URI")
-client = MongoClient(MONGO_URI)
 db = client["oauth_db"]  # Using same database as existing oauth collections
 reminders_collection = db["reminders"]
 
@@ -26,7 +23,7 @@ SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 class AuthRequiredError(Exception):
     pass
 
-def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=None, event_date: str = None, event_time: str = None) -> dict:
+def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=None, phone_number=None, event_date: str = None, event_time: str = None) -> dict:
     """
     Creates a reminder for an existing calendar event.
     
@@ -93,6 +90,7 @@ def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=No
     # Store reminder in database
     reminder_data = {
         "user_id": user_id,
+        "phone_number": phone_number,
         "type": "event_reminder",
         "event_title": event_title,
         "event_datetime": event_datetime,
@@ -124,7 +122,7 @@ def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=No
         "reminder_time": reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')
     }
 
-def create_custom_reminder(message: str, remind_in: str, user_id=None) -> dict:
+def create_custom_reminder(message: str, remind_in: str, user_id=None, phone_number=None) -> dict:
     """
     Creates a custom reminder for a specific time.
     
@@ -208,6 +206,7 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None) -> dict:
     # Store reminder in database
     reminder_data = {
         "user_id": user_id,
+        "phone_number": phone_number,
         "type": "custom_reminder",
         "message": f"⏰ Reminder: {message}",
         "reminder_time": reminder_time,
@@ -261,16 +260,16 @@ def send_reminder(reminder_id: str):
             print(f"[REMINDER ERROR] Reminder {reminder_id} not found in database")
             return
         
-        user_id = reminder["user_id"]
+        phone_number = reminder["phone_number"]
         message = reminder["message"]
         
-        print(f"[REMINDER] Sending reminder to user {user_id}: {message}")
+        print(f"[REMINDER] Sending reminder to user {phone_number}: {message}")
         
         # Send WhatsApp message
         loop = get_event_loop()
         if loop:
             asyncio.run_coroutine_threadsafe(
-                send_whatsapp_message(user_id, message),
+                send_whatsapp_message(phone_number, message),
                 loop
             )
         

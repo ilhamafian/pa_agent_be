@@ -2,6 +2,10 @@ from pymongo import MongoClient
 import os
 from datetime import datetime
 from typing import List, Dict, Optional
+from dotenv import load_dotenv
+
+# Load environment variables first
+load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
 MEMORY_MESSAGE_LIMIT = int(os.getenv("MEMORY_MESSAGE_LIMIT", "30"))

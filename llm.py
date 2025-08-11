@@ -34,7 +34,11 @@ from tools.task import (
     get_tasks,
     update_task_status
 )
-from utils.utils import clean_unicode, get_auth_url, send_whatsapp_message
+from utils.utils import clean_unicode, get_auth_url, hash_data, send_whatsapp_message
+from db.mongo import client
+
+db = client["oauth_db"]
+users_collection = db["users"]
 
 load_dotenv()
 
@@ -67,7 +71,10 @@ async def assistant_response(sender: str, text: str):
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     try:
-        user_id = sender
+        phone_number = sender
+        hashed_number = hash_data(sender)
+        user =  users_collection.find_one({"phone_number": hashed_number})
+        user_id = str(user["_id"])
         user_input = text
 
         print(f"Processing message from {user_id}: {user_input}")
@@ -129,7 +136,8 @@ async def assistant_response(sender: str, text: str):
                             minutes_before=args.get("minutes_before", 30),
                             event_date=args.get("event_date"),
                             event_time=args.get("event_time"),
-                            user_id=user_id
+                            user_id=user_id,
+                            phone_number=phone_number
                         )
                         reply = result["message"]
 
@@ -137,7 +145,8 @@ async def assistant_response(sender: str, text: str):
                         result = create_custom_reminder(
                             message=args["message"],
                             remind_in=args["remind_in"],
-                            user_id=user_id
+                            user_id=user_id,
+                            phone_number=phone_number
                         )
                         reply = result["message"]
 
@@ -251,7 +260,7 @@ async def assistant_response(sender: str, text: str):
                     )
 
                 safe_reply = clean_unicode(reply)
-                await send_whatsapp_message(user_id, safe_reply)
+                await send_whatsapp_message(phone_number, safe_reply)
                 
                 # Save assistant message to history
                 assistant_message = {"role": "assistant", "content": reply}
@@ -262,7 +271,7 @@ async def assistant_response(sender: str, text: str):
         if ai_message.content:
             reply = ai_message.content.strip()
             safe_reply = clean_unicode(reply)
-            await send_whatsapp_message(user_id, safe_reply)
+            await send_whatsapp_message(phone_number, safe_reply)
             
             # Save assistant message to history
             assistant_message = {"role": "assistant", "content": reply}

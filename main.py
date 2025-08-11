@@ -11,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from concurrent.futures import ThreadPoolExecutor
 from google_auth_oauthlib.flow import Flow
 from user import router as user_router
+from settings import router as settings_router
+from integrations import router as integrations_router
 
 # Internal Imports
 from tools.scheduler import start_scheduler
@@ -20,6 +22,7 @@ from utils.utils import hash_data, send_whatsapp_message
 
 db = client["oauth_db"]
 users_collection = db["users"]
+integrations_collection = db["integrations"]
 
 # === Setup ===
 load_dotenv()
@@ -92,17 +95,6 @@ async def receive_whatsapp(request: Request):
 
         if not user:
             print(f"👤 New user detected: {sender} — initiating onboarding.")
-
-            # Step 2: Insert basic user
-            now = datetime.now(pytz.timezone("Asia/Kuala_Lumpur"))
-            users_collection.insert_one({
-                "phone_number": sender,
-                "nickname": "Unknown",
-                "language": "Unknown",
-                "created_at": now,
-                "updated_at": now,
-                "onboarded": False
-            })
 
             # Step 3: Send onboarding message
             onboarding_url = f"{FRONTEND_URL}/onboarding?phone_number={sender}"
@@ -193,6 +185,13 @@ async def auth_callback(request: Request):
         upsert=True
     )
 
+    # Update integrations.google_calendar.enabled to True for this user
+    integrations_collection.update_one(
+        {"user_id": user_id},
+        {"$set": {"integrations.google_calendar.enabled": True}},
+        upsert=True
+    )
+
     return RedirectResponse(
         url=f"{FRONTEND_URL}/auth-result?status=success",
         status_code=303
@@ -200,6 +199,8 @@ async def auth_callback(request: Request):
 
 # Register your user API routes
 app.include_router(user_router)
+app.include_router(settings_router)
+app.include_router(integrations_router)
 
 # === Start Scheduler ===
 start_scheduler()

@@ -1,9 +1,12 @@
 import hashlib
+from fastapi import Depends, HTTPException, logger
 import httpx
 import os
 import json
 import asyncio
 import threading
+from jose import jwt
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import Flow
 from datetime import datetime
@@ -15,6 +18,10 @@ SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 APP_URL = os.getenv("APP_URL")
+SECRET_KEY = os.getenv("TOKEN_SECRET_KEY")
+ALGORITHM = "HS256"
+
+security = HTTPBearer()
 
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
@@ -89,3 +96,25 @@ def get_event_loop():
         # Wait briefly for the background loop to initialize
         event_loop_ready.wait(timeout=5)
     return event_loop
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    print("Authorization header received")
+
+    token = credentials.credentials
+    print(f"Token starts with: {token[:10]}... (length: {len(token)})")
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        print(f"Decoded JWT payload: {payload}")
+    except jwt.ExpiredSignatureError:
+        print("JWT token has expired")
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError as e:
+        print(f"Invalid JWT token: {e}")
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if "user_id" not in payload:
+        print("Decoded JWT payload missing 'user_id'")
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    return payload
