@@ -14,6 +14,7 @@ import pytz
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from db.mongo import oauth_states_collection, oauth_tokens_collection
+from cryptography.fernet import Fernet
 
 load_dotenv()  # Make sure environment variables are loaded
 
@@ -23,6 +24,7 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 APP_URL = os.getenv("APP_URL")
 SECRET_KEY = os.getenv("TOKEN_SECRET_KEY")
 ALGORITHM = "HS256"
+fernet = Fernet(os.getenv("PHONE_ENCRYPTION_KEY"))
 
 security = HTTPBearer()
 
@@ -34,6 +36,12 @@ def clean_unicode(text):
 def hash_data(data: str) -> str:
     """Hash sensitive data using SHA-256"""
     return hashlib.sha256(data.encode()).hexdigest()
+
+def encrypt_phone(phone_number: str) -> str:
+    return fernet.encrypt(phone_number.encode()).decode()
+
+def decrypt_phone(encrypted_number: str) -> str:
+    return fernet.decrypt(encrypted_number.encode()).decode()
 
 async def send_whatsapp_message(recipient_id: str, message: str):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"

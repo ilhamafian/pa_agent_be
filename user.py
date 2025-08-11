@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from jose import jwt
 import pytz
 from db.mongo import client
-from utils.utils import hash_data
+from utils.utils import hash_data, encrypt_phone
 
 load_dotenv()
 SECRET_KEY = os.getenv("TOKEN_SECRET_KEY")
@@ -57,8 +57,8 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 
 def _check_phone_number_exists(phone_number: int) -> bool:
     """Utility function to check if a phone number exists in the database"""
-    hashed_phone = hash_data(str(phone_number))
-    user = users_collection.find_one({"phone_number": hashed_phone})
+    encrypted_phone = encrypt_phone(str(phone_number))
+    user = users_collection.find_one({"phone_number": encrypted_phone})
     return bool(user)
 
 
@@ -69,10 +69,10 @@ async def create_user(data: UserPayload):
     try:
         # Hash PIN and phone_number
         hashed_pin = hash_data(str(data.PIN))
-        hashed_phone = hash_data(str(data.phone_number))
+        encrypted_phone = encrypt_phone(str(data.phone_number))
 
         # Check if user already exists (by hashed phone number)
-        if _check_phone_number_exists(hashed_phone):  # pass hashed here!
+        if _check_phone_number_exists(encrypt_phone):  # pass hashed here!
             raise HTTPException(status_code=400, detail="User with this phone number already exists")
 
         # Get current timestamp
@@ -82,7 +82,7 @@ async def create_user(data: UserPayload):
         # Prepare user document for MongoDB
         user_doc = {
             "PIN": hashed_pin,
-            "phone_number": hashed_phone,
+            "phone_number": encrypted_phone,
             "nickname": data.nickname,
             "email": data.email,
             "language": data.language,
@@ -144,10 +144,11 @@ async def login_user(data: UserLoginPayload):
     try:
         # Hash PIN and phone_number
         hashed_pin = hash_data(str(data.PIN))
-        hashed_phone = hash_data(str(data.phone_number))
+        encrypted_phone = encrypt_phone(str(data.phone_number))
+        print(f"Encrypted phone: {encrypted_phone}")
         
         # Find user by hashed phone number
-        user = users_collection.find_one({"phone_number": hashed_phone})
+        user = users_collection.find_one({"phone_number": encrypted_phone})
         
         if not user:
             print(f"User not found: {data.phone_number}")
@@ -195,8 +196,8 @@ async def check_phone_number_exist(data: dict):
         if not phone_number:
             raise HTTPException(status_code=400, detail="Invalid phone number")
 
-        hashed_phone = hash_data(str(phone_number))
-        user = users_collection.find_one({"phone_number": hashed_phone})
+        encrypted_phone = encrypt_phone(str(phone_number))
+        user = users_collection.find_one({"phone_number": encrypted_phone})
 
         return {"exists": bool(user)}
 
@@ -214,10 +215,10 @@ async def logout(data: LogoutPayload):
     print(f"Logging out user for phone: {data.phone_number}")
 
     try:
-        hashed_phone = hash_data(data.phone_number)
+        encrypted_phone = encrypt_phone(data.phone_number)
         
         result = users_collection.update_one(
-            {"phone_number": hashed_phone},
+            {"phone_number": encrypted_phone},
             {"$set": {"last_login": None}}
         )
 

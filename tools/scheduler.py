@@ -9,7 +9,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 from db.mongo import get_all_users, oauth_tokens_collection
-from utils.utils import send_whatsapp_message, get_event_loop
+from utils.utils import decrypt_phone, send_whatsapp_message, get_event_loop
 from tools.task import get_tasks
 
 load_dotenv()
@@ -94,12 +94,12 @@ def format_task_reminder(tasks):
     
     return "\n".join(lines)
 
-def format_combined_reminder(events, tasks, date):
+def format_combined_reminder(events, tasks, nickname):
     """Combine events and tasks into a comprehensive daily reminder"""
     lines = []
     
     # Add greeting
-    lines.append(f"Your day is wrapped up! Here's what's coming up for tomorrow:\n")
+    lines.append(f"Hi {nickname}! Your day is wrapped up! Here's what's coming up for tomorrow:\n")
     
     # Add events section
     if events:
@@ -146,7 +146,7 @@ def format_combined_reminder(events, tasks, date):
     return "\n".join(lines)
 
 def start_scheduler():
-    def daily_reminder_job():
+    def tomorrow_reminder_job():
         try:
             print("\n[REMINDER JOB] Starting daily reminder job...")
             tomorrow = (datetime.now(pytz.timezone("Asia/Kuala_Lumpur")) + timedelta(days=1)).date()
@@ -155,6 +155,9 @@ def start_scheduler():
 
             for user in users:
                 user_id = user.get("user_id")
+                nickname = user.get("nickname")
+                encrypted_phone = user.get("phone_number")
+                decrypted_phone = decrypt_phone(encrypted_phone)
                 print(f"[REMINDER JOB] Fetching data for user_id: {user_id}")
                 
                 # Fetch events for tomorrow
@@ -173,13 +176,13 @@ def start_scheduler():
                 
                 # Send combined reminder if there are events or tasks
                 if events or all_active_tasks:
-                    message = format_combined_reminder(events, all_active_tasks, tomorrow)
+                    message = format_combined_reminder(events, all_active_tasks, nickname)
                     print(f"[REMINDER JOB] Sending combined reminder to user {user_id}:")
                     print(message)
                     loop = get_event_loop()
                     if loop:
                         asyncio.run_coroutine_threadsafe(
-                            send_whatsapp_message(user_id, message),
+                            send_whatsapp_message(decrypted_phone, message),
                             loop
                         )
                 else:
@@ -187,6 +190,6 @@ def start_scheduler():
         except Exception as e:
             print(f"🔥 [REMINDER JOB ERROR] {e}")
 
-    scheduler.add_job(daily_reminder_job, 'cron', hour=19, minute=30)
+    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=23, minute=30)
     scheduler.start()
     print("\n✅ Scheduler started and daily reminder job registered at 7:30 PM daily.")
