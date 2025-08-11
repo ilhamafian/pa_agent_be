@@ -19,7 +19,7 @@ from dashboard import router as dashboard_router
 from tools.scheduler import start_scheduler
 from llm import assistant_response
 from db.mongo import oauth_states_collection, oauth_tokens_collection
-from utils.utils import encrypt_phone, hash_data, send_whatsapp_message
+from utils.utils import hash_data, send_whatsapp_message
 
 db = client["oauth_db"]
 users_collection = db["users"]
@@ -91,8 +91,8 @@ async def receive_whatsapp(request: Request):
         print(f"📨 Received message from {sender}: {text}")
 
         # ✅ Step 1: Check if user exists in MongoDB
-        encrypted_sender = encrypt_phone(sender)
-        user = users_collection.find_one({"phone_number": encrypted_sender})
+        hashed_sender = hash_data(sender)
+        user = users_collection.find_one({"hashed_phone_number": hashed_sender})
 
         if not user:
             print(f"👤 New user detected: {sender} — initiating onboarding.")
