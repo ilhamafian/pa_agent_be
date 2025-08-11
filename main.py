@@ -92,6 +92,7 @@ async def receive_whatsapp(request: Request):
 
         # ✅ Step 1: Check if user exists in MongoDB
         hashed_sender = hash_data(sender)
+        print(f"Hashed sender: {hashed_sender}")
         user = users_collection.find_one({"hashed_phone_number": hashed_sender})
 
         if not user:

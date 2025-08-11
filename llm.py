@@ -72,8 +72,24 @@ async def assistant_response(sender: str, text: str):
 
     try:
         phone_number = sender
-        encrypted_number = encrypt_phone(sender)
-        user =  users_collection.find_one({"phone_number": encrypted_number})
+        hashed_number = hash_data(sender)
+        user = users_collection.find_one({"hashed_phone_number": hashed_number})
+        
+        if not user:
+            print(f"❌ UNEXPECTED: User not found in assistant_response for sender: {sender}")
+            print(f"❌ Hashed number: {hashed_number}")
+            print(f"❌ This should not happen as main.py already checked user existence")
+            
+            # Try one more time to rule out transient database issues
+            user_retry = users_collection.find_one({"hashed_phone_number": hashed_number})
+            if user_retry:
+                print(f"✅ RETRY SUCCESS: User found on second attempt")
+                user = user_retry
+            else:
+                print(f"❌ RETRY FAILED: User still not found - potential database issue")
+                await send_whatsapp_message(phone_number, "❌ Temporary issue. Please try again in a moment.")
+                return {"ok": False, "error": "User not found after retry"}
+        
         user_id = str(user["_id"])
         user_input = text
 
