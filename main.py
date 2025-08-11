@@ -13,6 +13,7 @@ from google_auth_oauthlib.flow import Flow
 from user import router as user_router
 from settings import router as settings_router
 from integrations import router as integrations_router
+from dashboard import router as dashboard_router
 
 # Internal Imports
 from tools.scheduler import start_scheduler
@@ -201,6 +202,7 @@ async def auth_callback(request: Request):
 app.include_router(user_router)
 app.include_router(settings_router)
 app.include_router(integrations_router)
+app.include_router(dashboard_router)
 
 # === Start Scheduler ===
 start_scheduler()
