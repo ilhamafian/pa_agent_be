@@ -34,7 +34,7 @@ from tools.task import (
     get_tasks,
     update_task_status
 )
-from utils.utils import clean_unicode, get_auth_url, hash_data, send_whatsapp_message
+from utils.utils import clean_unicode, encrypt_phone, get_auth_url, hash_data, send_whatsapp_message
 from db.mongo import client
 
 db = client["oauth_db"]
@@ -72,8 +72,8 @@ async def assistant_response(sender: str, text: str):
 
     try:
         phone_number = sender
-        hashed_number = hash_data(sender)
-        user =  users_collection.find_one({"phone_number": hashed_number})
+        encrypted_number = encrypt_phone(sender)
+        user =  users_collection.find_one({"phone_number": encrypted_number})
         user_id = str(user["_id"])
         user_input = text
 
