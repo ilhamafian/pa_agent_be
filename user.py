@@ -22,6 +22,8 @@ router = APIRouter()
 db = client["oauth_db"]
 users_collection = db["users"]
 waitlist_collection = db["waitlist"]
+integrations_collection = db["integrations"]
+settings_collection = db["settings"]
 
 class Metadata(BaseModel):
     q1: List[str]
@@ -63,16 +65,20 @@ def _check_phone_number_exists(phone_number: int) -> bool:
 @router.post("/user_onboarding")
 async def create_user(data: UserPayload):
     print(f"Received user: {data}")
-    
+
     try:
         # Hash PIN and phone_number
         hashed_pin = hash_data(str(data.PIN))
         hashed_phone = hash_data(str(data.phone_number))
-        
+
+        # Check if user already exists (by hashed phone number)
+        if _check_phone_number_exists(hashed_phone):  # pass hashed here!
+            raise HTTPException(status_code=400, detail="User with this phone number already exists")
+
         # Get current timestamp
         tz = pytz.timezone("Asia/Kuala_Lumpur")
         now = datetime.now(tz)
-        
+
         # Prepare user document for MongoDB
         user_doc = {
             "PIN": hashed_pin,
@@ -89,25 +95,44 @@ async def create_user(data: UserPayload):
             "created_at": now,
             "updated_at": now
         }
-        
-        # Check if user already exists (by hashed phone number)
-        if _check_phone_number_exists(data.phone_number):
-            raise HTTPException(status_code=400, detail="User with this phone number already exists")
-        
+
         # Insert user into MongoDB
         result = users_collection.insert_one(user_doc)
-        
-        print(f"User created with ID: {result.inserted_id}")
+        user_id_str = str(result.inserted_id)
 
-        token = create_access_token(data={"user_id": str(result.inserted_id)})
+        # Prepare and insert integrations and settings using inserted user_id
+        integrations_doc = {
+            "user_id": user_id_str,
+            "integrations": {
+                "google_calendar": {
+                    "enabled": False
+                }
+            }
+        }
+        settings_doc = {
+            "user_id": user_id_str,
+            "settings": {
+                "daily_briefing": {
+                    "enabled": True,
+                    "time": 1930
+                }
+            }
+        }
+
+        integrations_collection.insert_one(integrations_doc)
+        settings_collection.insert_one(settings_doc)
+
+        print(f"User created with ID: {user_id_str}")
+
+        token = create_access_token(data={"user_id": user_id_str})
         return {
             "token": token,
             "message": "User created successfully",
-            "user_id": str(result.inserted_id),
+            "user_id": user_id_str,
             "nickname": data.nickname,
             "email": data.email
         }
-        
+
     except Exception as e:
         print(f"Error creating user: {e}")
         raise HTTPException(status_code=500, detail="Failed to create user")
