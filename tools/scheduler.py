@@ -94,16 +94,20 @@ def format_task_reminder(tasks):
     
     return "\n".join(lines)
 
-def format_combined_reminder(events, tasks, nickname):
+def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     """Combine events and tasks into a comprehensive daily reminder"""
     lines = []
     
-    # Add greeting
-    lines.append(f"Hi {nickname}! Your day is wrapped up! Here's what's coming up for tomorrow:\n")
+    # Add greeting based on time of day
+    if is_tomorrow:
+        lines.append(f"Hi {nickname}! Your day is wrapped up! Here's what's coming up for tomorrow:\n")
+    else:
+        lines.append(f"Good morning {nickname}! Here's what you have planned for today:\n")
     
     # Add events section
     if events:
-        lines.append(f"📅 **Upcoming Events:**")
+        event_header = "📅 **Tomorrow's Events:**" if is_tomorrow else "📅 **Today's Events:**"
+        lines.append(event_header)
         for event in events:
             title = event.get("summary", "No Title")
             start = event["start"].get("dateTime", event["start"].get("date"))
@@ -139,45 +143,49 @@ def format_combined_reminder(events, tasks, nickname):
     
     # Add motivational footer
     if events or tasks:
-        lines.append("\n Have a productive day!")
+        footer_message = "\n Have a productive day!" if is_tomorrow else "\n Let's make today productive!"
+        lines.append(footer_message)
     else:
-        lines.append("🎉 You have a free day with no scheduled events or pending tasks!")
+        if is_tomorrow:
+            lines.append("🎉 You have a free day with no scheduled events or pending tasks!")
+        else:
+            lines.append("🎉 You have a free day today with no scheduled events or pending tasks!")
     
     return "\n".join(lines)
 
 def start_scheduler():
-    def tomorrow_reminder_job():
+    def today_reminder_job():
         try:
-            print("\n[REMINDER JOB] Starting daily reminder job...")
-            tomorrow = (datetime.now(pytz.timezone("Asia/Kuala_Lumpur")) + timedelta(days=1)).date()
+            print("\n[TODAY REMINDER JOB] Starting morning reminder job...")
+            today = datetime.now(pytz.timezone("Asia/Kuala_Lumpur")).date()
             users = get_all_users() or []
-            print(f"[REMINDER JOB] Checking events and tasks for {len(users)} users on {tomorrow}")
+            print(f"[TODAY REMINDER JOB] Checking events and tasks for {len(users)} users on {today}")
 
             for user in users:
                 user_id = user.get("user_id")
                 nickname = user.get("nickname")
                 encrypted_phone = user.get("phone_number")
                 decrypted_phone = decrypt_phone(encrypted_phone)
-                print(f"[REMINDER JOB] Fetching data for user_id: {user_id}")
+                print(f"[TODAY REMINDER JOB] Fetching data for user_id: {user_id}")
                 
-                # Fetch events for tomorrow
-                events = get_events_for_user_on_date(user_id, tomorrow)
-                print(f"[REMINDER JOB] Found {len(events)} events for user {user_id}")
+                # Fetch events for today
+                events = get_events_for_user_on_date(user_id, today)
+                print(f"[TODAY REMINDER JOB] Found {len(events)} events for user {user_id}")
                 
                 # Fetch pending and in-progress tasks
                 try:
                     pending_tasks = get_tasks(user_id, status="pending") or []
                     in_progress_tasks = get_tasks(user_id, status="in_progress") or []
                     all_active_tasks = pending_tasks + in_progress_tasks
-                    print(f"[REMINDER JOB] Found {len(all_active_tasks)} active tasks for user {user_id}")
+                    print(f"[TODAY REMINDER JOB] Found {len(all_active_tasks)} active tasks for user {user_id}")
                 except Exception as task_error:
-                    print(f"[REMINDER JOB] Error fetching tasks for user {user_id}: {task_error}")
+                    print(f"[TODAY REMINDER JOB] Error fetching tasks for user {user_id}: {task_error}")
                     all_active_tasks = []
                 
                 # Send combined reminder if there are events or tasks
                 if events or all_active_tasks:
-                    message = format_combined_reminder(events, all_active_tasks, nickname)
-                    print(f"[REMINDER JOB] Sending combined reminder to user {user_id}:")
+                    message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=False)
+                    print(f"[TODAY REMINDER JOB] Sending combined reminder to user {user_id}:")
                     print(message)
                     loop = get_event_loop()
                     if loop:
@@ -186,10 +194,59 @@ def start_scheduler():
                             loop
                         )
                 else:
-                    print(f"[REMINDER JOB] No events or active tasks to notify for user {user_id}.")
+                    print(f"[TODAY REMINDER JOB] No events or active tasks to notify for user {user_id}.")
         except Exception as e:
-            print(f"🔥 [REMINDER JOB ERROR] {e}")
+            print(f"🔥 [TODAY REMINDER JOB ERROR] {e}")
 
-    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=22, minute=40)
+    def tomorrow_reminder_job():
+        try:
+            print("\n[TOMORROW REMINDER JOB] Starting daily reminder job...")
+            tomorrow = (datetime.now(pytz.timezone("Asia/Kuala_Lumpur")) + timedelta(days=1)).date()
+            users = get_all_users() or []
+            print(f"[TOMORROW REMINDER JOB] Checking events and tasks for {len(users)} users on {tomorrow}")
+
+            for user in users:
+                user_id = user.get("user_id")
+                nickname = user.get("nickname")
+                encrypted_phone = user.get("phone_number")
+                decrypted_phone = decrypt_phone(encrypted_phone)
+                print(f"[TOMORROW REMINDER JOB] Fetching data for user_id: {user_id}")
+                
+                # Fetch events for tomorrow
+                events = get_events_for_user_on_date(user_id, tomorrow)
+                print(f"[TOMORROW REMINDER JOB] Found {len(events)} events for user {user_id}")
+                
+                # Fetch pending and in-progress tasks
+                try:
+                    pending_tasks = get_tasks(user_id, status="pending") or []
+                    in_progress_tasks = get_tasks(user_id, status="in_progress") or []
+                    all_active_tasks = pending_tasks + in_progress_tasks
+                    print(f"[TOMORROW REMINDER JOB] Found {len(all_active_tasks)} active tasks for user {user_id}")
+                except Exception as task_error:
+                    print(f"[TOMORROW REMINDER JOB] Error fetching tasks for user {user_id}: {task_error}")
+                    all_active_tasks = []
+                
+                # Send combined reminder if there are events or tasks
+                if events or all_active_tasks:
+                    message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=True)
+                    print(f"[TOMORROW REMINDER JOB] Sending combined reminder to user {user_id}:")
+                    print(message)
+                    loop = get_event_loop()
+                    if loop:
+                        asyncio.run_coroutine_threadsafe(
+                            send_whatsapp_message(decrypted_phone, message),
+                            loop
+                        )
+                else:
+                    print(f"[TOMORROW REMINDER JOB] No events or active tasks to notify for user {user_id}.")
+        except Exception as e:
+            print(f"🔥 [TOMORROW REMINDER JOB ERROR] {e}")
+
+    # Schedule today's reminder at 9:00 AM
+    scheduler.add_job(today_reminder_job, 'cron', hour=9, minute=0)
+    # Schedule tomorrow's reminder at 10:40 PM
+    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=22, minute=20)
     scheduler.start()
-    print("\n✅ Scheduler started and daily reminder job registered at 7:30 PM daily.")
+    print("\n✅ Scheduler started with:")
+    print("   • Today's reminder at 9:00 AM")
+    print("   • Tomorrow's reminder at 10:40 PM")
