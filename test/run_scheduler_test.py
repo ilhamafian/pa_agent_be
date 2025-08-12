@@ -12,8 +12,10 @@ from dotenv import load_dotenv
 load_dotenv()
 os.environ["SCHEDULER_TEST_MODE"] = "true"
 
-# Add project root to path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add the project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+print(f"Project root: {project_root}")  # Debug print
 
 def test_today_reminder():
     """Test today's reminder job"""
