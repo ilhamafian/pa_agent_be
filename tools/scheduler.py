@@ -14,6 +14,17 @@ from tools.task import get_tasks
 
 load_dotenv()
 
+# Test mode configuration
+TEST_MODE = os.getenv("SCHEDULER_TEST_MODE", "false").lower() == "true"
+
+async def mock_send_whatsapp_message(phone_number, message):
+    """Mock version of send_whatsapp_message for testing"""
+    print(f"\n📱 [TEST MODE] Would send WhatsApp to {phone_number}:")
+    print("=" * 60)
+    print(message)
+    print("=" * 60)
+    return {"status": "mock_success", "message_id": "test_12345"}
+
 SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 
 scheduler = BackgroundScheduler(timezone="Asia/Kuala_Lumpur")
@@ -165,7 +176,21 @@ def start_scheduler():
                 user_id = user.get("user_id")
                 nickname = user.get("nickname")
                 encrypted_phone = user.get("phone_number")
-                decrypted_phone = decrypt_phone(encrypted_phone)
+                
+                # Skip user if essential data is missing
+                if not user_id or not nickname or not encrypted_phone:
+                    print(f"[TODAY REMINDER JOB] Skipping user due to missing data: user_id={user_id}, nickname={nickname}, phone={bool(encrypted_phone)}")
+                    continue
+                
+                try:
+                    decrypted_phone = decrypt_phone(encrypted_phone)
+                    if not decrypted_phone:
+                        print(f"[TODAY REMINDER JOB] Skipping user {user_id} - failed to decrypt phone number")
+                        continue
+                except Exception as decrypt_error:
+                    print(f"[TODAY REMINDER JOB] Error decrypting phone for user {user_id}: {decrypt_error}")
+                    continue
+                
                 print(f"[TODAY REMINDER JOB] Fetching data for user_id: {user_id}")
                 
                 # Fetch events for today
@@ -186,11 +211,16 @@ def start_scheduler():
                 if events or all_active_tasks:
                     message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=False)
                     print(f"[TODAY REMINDER JOB] Sending combined reminder to user {user_id}:")
-                    print(message)
+                    if not TEST_MODE:
+                        print(message)
+                    
+                    # Choose send function based on test mode
+                    send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
+                    
                     loop = get_event_loop()
                     if loop:
                         asyncio.run_coroutine_threadsafe(
-                            send_whatsapp_message(decrypted_phone, message),
+                            send_func(decrypted_phone, message),
                             loop
                         )
                 else:
@@ -209,7 +239,21 @@ def start_scheduler():
                 user_id = user.get("user_id")
                 nickname = user.get("nickname")
                 encrypted_phone = user.get("phone_number")
-                decrypted_phone = decrypt_phone(encrypted_phone)
+                
+                # Skip user if essential data is missing
+                if not user_id or not nickname or not encrypted_phone:
+                    print(f"[TOMORROW REMINDER JOB] Skipping user due to missing data: user_id={user_id}, nickname={nickname}, phone={bool(encrypted_phone)}")
+                    continue
+                
+                try:
+                    decrypted_phone = decrypt_phone(encrypted_phone)
+                    if not decrypted_phone:
+                        print(f"[TOMORROW REMINDER JOB] Skipping user {user_id} - failed to decrypt phone number")
+                        continue
+                except Exception as decrypt_error:
+                    print(f"[TOMORROW REMINDER JOB] Error decrypting phone for user {user_id}: {decrypt_error}")
+                    continue
+                
                 print(f"[TOMORROW REMINDER JOB] Fetching data for user_id: {user_id}")
                 
                 # Fetch events for tomorrow
@@ -230,11 +274,16 @@ def start_scheduler():
                 if events or all_active_tasks:
                     message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=True)
                     print(f"[TOMORROW REMINDER JOB] Sending combined reminder to user {user_id}:")
-                    print(message)
+                    if not TEST_MODE:
+                        print(message)
+                    
+                    # Choose send function based on test mode
+                    send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
+                    
                     loop = get_event_loop()
                     if loop:
                         asyncio.run_coroutine_threadsafe(
-                            send_whatsapp_message(decrypted_phone, message),
+                            send_func(decrypted_phone, message),
                             loop
                         )
                 else:
@@ -245,8 +294,34 @@ def start_scheduler():
     # Schedule today's reminder at 9:00 AM
     scheduler.add_job(today_reminder_job, 'cron', hour=9, minute=0)
     # Schedule tomorrow's reminder at 10:40 PM
-    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=22, minute=20)
+    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=23, minute=00)
     scheduler.start()
     print("\n✅ Scheduler started with:")
     print("   • Today's reminder at 9:00 AM")
-    print("   • Tomorrow's reminder at 10:40 PM")
+    print("   • Tomorrow's reminder at 10:20 PM")
+    if TEST_MODE:
+        print("   🧪 RUNNING IN TEST MODE - WhatsApp messages will be mocked")
+
+def trigger_today_reminder_manually():
+    """Manually trigger today's reminder for testing"""
+    print("\n🔧 [MANUAL TRIGGER] Running today's reminder job manually...")
+    # Get the inner function and call it directly
+    scheduler_jobs = scheduler.get_jobs()
+    for job in scheduler_jobs:
+        if 'today_reminder_job' in str(job.func):
+            job.func()
+            break
+    else:
+        print("❌ Today reminder job not found in scheduler")
+
+def trigger_tomorrow_reminder_manually():
+    """Manually trigger tomorrow's reminder for testing"""
+    print("\n🔧 [MANUAL TRIGGER] Running tomorrow's reminder job manually...")
+    # Get the inner function and call it directly
+    scheduler_jobs = scheduler.get_jobs()
+    for job in scheduler_jobs:
+        if 'tomorrow_reminder_job' in str(job.func):
+            job.func()
+            break
+    else:
+        print("❌ Tomorrow reminder job not found in scheduler")

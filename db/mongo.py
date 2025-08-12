@@ -25,7 +25,16 @@ except Exception as e:
     print(f"⚠️ Index creation failed (might already exist): {e}")
 
 def get_all_users():
-    users = list(oauth_tokens_collection.find({}))
+    """Get all users from the users collection"""
+    # Access the users collection directly
+    users_collection = db["users"]
+    
+    users = list(users_collection.find({}))
+    
+    # Transform the data to include user_id as string version of _id
+    for user in users:
+        user['user_id'] = str(user['_id'])
+    
     return users if users else []
 
 def get_conversation_history(user_id: str, fallback_memory: Dict = None) -> List[Dict]:
