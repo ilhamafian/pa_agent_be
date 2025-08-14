@@ -171,17 +171,19 @@ async def assistant_response(sender: str, text: str):
                         reply = result["message"]
 
                     elif function_name == "create_task":
+                        # Get the priority, defaulting to medium
+                        task_priority = args.get("priority", "medium")
                         result = create_task(
                             title=args["title"],
-                            priority=args.get("priority", "medium"),
+                            priority=task_priority,
                             description=args.get("description"),
                             user_id=user_id
                         )
-                        priority_emoji = "🔴" if args.get("priority") == "high" else "🟡" if args.get("priority") == "medium" else "🟢"
+                        priority_emoji = "🔴" if task_priority == "high" else "🟡" if task_priority == "medium" else "🟢"
                         reply = (
                             f"✅ Task Created\n\n"
                             f"Title: {args['title']}\n"
-                            f"Priority: {priority_emoji} {args.get('priority', 'medium').title()}\n"
+                            f"Priority: {priority_emoji} {task_priority.title()}\n"
                             f"Status: Pending"
                         )
 
