@@ -8,8 +8,11 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from google.auth.exceptions import RefreshError
 from db.mongo import oauth_tokens_collection
 from dateutil.relativedelta import relativedelta
+from utils.utils import get_auth_url
 
 load_dotenv()  # Make sure environment variables are loaded
 
@@ -30,50 +33,69 @@ def create_event(time: str = None, end_time: str = None, date: str = None, title
     if not token_data:
         raise AuthRequiredError("AUTH_REQUIRED")
 
-    creds = Credentials(
-        token=token_data["token"]["token"],
-        refresh_token=token_data["token"]["refresh_token"],
-        token_uri=token_data["token"]["token_uri"],
-        client_id=token_data["token"]["client_id"],
-        client_secret=token_data["token"]["client_secret"],
-        scopes=token_data["token"]["scopes"],
-    )
+    try:
+        creds = Credentials(
+            token=token_data["token"]["token"],
+            refresh_token=token_data["token"]["refresh_token"],
+            token_uri=token_data["token"]["token_uri"],
+            client_id=token_data["token"]["client_id"],
+            client_secret=token_data["token"]["client_secret"],
+            scopes=token_data["token"]["scopes"],
+        )
 
-    service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
+        service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
 
-    if time and end_time:
-        # Timed event
-        start_datetime = f"{date}T{time}:00"
-        end_datetime = f"{date}T{end_time}:00"
-        event = {
-            'summary': title,
-            'description': description or "",  # Include description if provided
-            'start': {
-                'dateTime': start_datetime,
-                'timeZone': 'Asia/Kuala_Lumpur',
-            },
-            'end': {
-                'dateTime': end_datetime,
-                'timeZone': 'Asia/Kuala_Lumpur',
-            },
-        }
-    else:
-        # All-day event
-        event = {
-            'summary': title,
-            'description': description or "",  # Include description if provided
-            'start': {
-                'date': date,
-            },
-            'end': {
-                'date': date,
-            },
-        }
+        if time and end_time:
+            # Timed event
+            start_datetime = f"{date}T{time}:00"
+            end_datetime = f"{date}T{end_time}:00"
+            event = {
+                'summary': title,
+                'description': description or "",  # Include description if provided
+                'start': {
+                    'dateTime': start_datetime,
+                    'timeZone': 'Asia/Kuala_Lumpur',
+                },
+                'end': {
+                    'dateTime': end_datetime,
+                    'timeZone': 'Asia/Kuala_Lumpur',
+                },
+            }
+        else:
+            # All-day event
+            event = {
+                'summary': title,
+                'description': description or "",  # Include description if provided
+                'start': {
+                    'date': date,
+                },
+                'end': {
+                    'date': date,
+                },
+            }
 
-    print("In event:", event)
-    event = service.events().insert(calendarId='primary', body=event).execute()
-    print('Event created:', event.get('htmlLink'))
-    return event
+        print("In event:", event)
+        event = service.events().insert(calendarId='primary', body=event).execute()
+        print('Event created:', event.get('htmlLink'))
+        return event
+    
+    except (RefreshError, HttpError) as e:
+        # Handle expired or invalid tokens
+        print(f"[DEBUG] Token error in create_event: {e}")
+        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+            raise AuthRequiredError("AUTH_REQUIRED")
+        else:
+            # Re-raise if it's a different type of error
+            raise e
+    except Exception as e:
+        # Handle any other unexpected errors
+        print(f"[DEBUG] Unexpected error in create_event: {e}")
+        # Check if the error message contains token expiration indicators
+        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+            raise AuthRequiredError("AUTH_REQUIRED")
+        else:
+            # Re-raise if it's a different type of error
+            raise e
 
 def update_event(user_id=None, original_title=None, new_title=None, new_date=None, new_start_time=None, new_end_time=None, new_description=None):
     """
@@ -96,80 +118,99 @@ def update_event(user_id=None, original_title=None, new_title=None, new_date=Non
     if not token_data:
         raise AuthRequiredError("AUTH_REQUIRED")
 
-    creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    try:
+        creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
-    # Define a time window to search for the event, e.g., +/- 7 days around new_date or today if new_date is None
-    tz = pytz.timezone("Asia/Kuala_Lumpur")
-    if new_date:
-        start_search = datetime.strptime(new_date, "%Y-%m-%d").replace(tzinfo=tz) - timedelta(days=7)
-        end_search = datetime.strptime(new_date, "%Y-%m-%d").replace(tzinfo=tz) + timedelta(days=7)
-    else:
-        now = datetime.now(tz)
-        start_search = now - timedelta(days=7)
-        end_search = now + timedelta(days=7)
-
-    events_result = service.events().list(
-        calendarId='primary',
-        timeMin=start_search.isoformat(),
-        timeMax=end_search.isoformat(),
-        q=original_title,
-        singleEvents=True,
-        orderBy='startTime'
-    ).execute()
-
-    events = events_result.get("items", [])
-    if not events:
-        return f"❌ No event found with title '{original_title}' in the search range."
-
-    # For demo, pick the first matched event (you can enhance by matching exact title or other criteria)
-    event = events[0]
-
-    # Update fields if provided
-    if new_title:
-        event['summary'] = new_title
-    if new_description is not None:
-        event['description'] = new_description
-
-    # If new date/time provided, update start and end accordingly
-    if new_date and new_start_time and new_end_time:
-        start_datetime = f"{new_date}T{new_start_time}:00"
-        end_datetime = f"{new_date}T{new_end_time}:00"
-        event['start'] = {'dateTime': start_datetime, 'timeZone': 'Asia/Kuala_Lumpur'}
-        event['end'] = {'dateTime': end_datetime, 'timeZone': 'Asia/Kuala_Lumpur'}
-    elif new_date:
-        # If only date, treat as all-day event
-        event['start'] = {'date': new_date}
-        event['end'] = {'date': new_date}
-
-    updated_event = service.events().update(
-        calendarId='primary',
-        eventId=event['id'],
-        body=event
-    ).execute()
-
-    # Format date/time for display
-    def format_datetime(dt):
-        if 'dateTime' in dt:
-            dt_obj = datetime.fromisoformat(dt['dateTime'])
-            return dt_obj.strftime("%Y-%m-%d %H:%M")
-        elif 'date' in dt:
-            return dt['date']
+        # Define a time window to search for the event, e.g., +/- 7 days around new_date or today if new_date is None
+        tz = pytz.timezone("Asia/Kuala_Lumpur")
+        if new_date:
+            start_search = datetime.strptime(new_date, "%Y-%m-%d").replace(tzinfo=tz) - timedelta(days=7)
+            end_search = datetime.strptime(new_date, "%Y-%m-%d").replace(tzinfo=tz) + timedelta(days=7)
         else:
-            return "Unknown"
+            now = datetime.now(tz)
+            start_search = now - timedelta(days=7)
+            end_search = now + timedelta(days=7)
 
-    title = updated_event.get('summary', 'No Title')
-    start_str = format_datetime(updated_event.get('start', {}))
-    end_str = format_datetime(updated_event.get('end', {}))
-    time_str = f"{start_str} to {end_str}" if start_str != end_str else start_str
-    link = updated_event.get('htmlLink', 'No Link')
+        events_result = service.events().list(
+            calendarId='primary',
+            timeMin=start_search.isoformat(),
+            timeMax=end_search.isoformat(),
+            q=original_title,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
 
-    return (
-        f"✅ Event Updated\n\n"
-        f"Title: {title}\n"
-        f"Date & Time: {time_str}\n"
-        f"Link: {link}"
-    )
+        events = events_result.get("items", [])
+        if not events:
+            return f"❌ No event found with title '{original_title}' in the search range."
+
+        # For demo, pick the first matched event (you can enhance by matching exact title or other criteria)
+        event = events[0]
+
+        # Update fields if provided
+        if new_title:
+            event['summary'] = new_title
+        if new_description is not None:
+            event['description'] = new_description
+
+        # If new date/time provided, update start and end accordingly
+        if new_date and new_start_time and new_end_time:
+            start_datetime = f"{new_date}T{new_start_time}:00"
+            end_datetime = f"{new_date}T{new_end_time}:00"
+            event['start'] = {'dateTime': start_datetime, 'timeZone': 'Asia/Kuala_Lumpur'}
+            event['end'] = {'dateTime': end_datetime, 'timeZone': 'Asia/Kuala_Lumpur'}
+        elif new_date:
+            # If only date, treat as all-day event
+            event['start'] = {'date': new_date}
+            event['end'] = {'date': new_date}
+
+        updated_event = service.events().update(
+            calendarId='primary',
+            eventId=event['id'],
+            body=event
+        ).execute()
+
+        # Format date/time for display
+        def format_datetime(dt):
+            if 'dateTime' in dt:
+                dt_obj = datetime.fromisoformat(dt['dateTime'])
+                return dt_obj.strftime("%Y-%m-%d %H:%M")
+            elif 'date' in dt:
+                return dt['date']
+            else:
+                return "Unknown"
+
+        title = updated_event.get('summary', 'No Title')
+        start_str = format_datetime(updated_event.get('start', {}))
+        end_str = format_datetime(updated_event.get('end', {}))
+        time_str = f"{start_str} to {end_str}" if start_str != end_str else start_str
+        link = updated_event.get('htmlLink', 'No Link')
+
+        return (
+            f"✅ Event Updated\n\n"
+            f"Title: {title}\n"
+            f"Date & Time: {time_str}\n"
+            f"Link: {link}"
+        )
+    
+    except (RefreshError, HttpError) as e:
+        # Handle expired or invalid tokens
+        print(f"[DEBUG] Token error in update_event: {e}")
+        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+            raise AuthRequiredError("AUTH_REQUIRED")
+        else:
+            # Re-raise if it's a different type of error
+            raise e
+    except Exception as e:
+        # Handle any other unexpected errors
+        print(f"[DEBUG] Unexpected error in update_event: {e}")
+        # Check if the error message contains token expiration indicators
+        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+            raise AuthRequiredError("AUTH_REQUIRED")
+        else:
+            # Re-raise if it's a different type of error
+            raise e
 
 
 def get_events(natural_range="today", user_id=None): 
@@ -181,107 +222,138 @@ def get_events(natural_range="today", user_id=None):
     if not token_data:
         raise AuthRequiredError("AUTH_REQUIRED")
 
-    creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    try:
+        creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
 
-    tz = pytz.timezone("Asia/Kuala_Lumpur")
-    now = datetime.now(tz)
-    print(f"[DEBUG] current time: {now}")
+        tz = pytz.timezone("Asia/Kuala_Lumpur")
+        now = datetime.now(tz)
+        print(f"[DEBUG] current time: {now}")
 
-    natural_range = natural_range.strip().lower()
-    
-    # Try parsing the range naturally (e.g., "tomorrow", "next week", weekday names)
-    date_range = dateparser.parse(
-        natural_range,
-        settings={
-            "TIMEZONE": "Asia/Kuala_Lumpur",
-            "RETURN_AS_TIMEZONE_AWARE": True,
-            "PREFER_DATES_FROM": "future",
-        }
-    )
-    # If a weekday parsed to a past date relative to now, bump to next week
-    if date_range and date_range < now:
-        date_range = date_range + timedelta(days=7)
-    print(f"[DEBUG] Parsed date_range: {date_range}")
+        natural_range = natural_range.strip().lower()
+        
+        # Try parsing the range naturally (e.g., "tomorrow", "next week", weekday names)
+        date_range = dateparser.parse(
+            natural_range,
+            settings={
+                "TIMEZONE": "Asia/Kuala_Lumpur",
+                "RETURN_AS_TIMEZONE_AWARE": True,
+                "PREFER_DATES_FROM": "future",
+            }
+        )
+        # If a weekday parsed to a past date relative to now, bump to next week
+        if date_range and date_range < now:
+            date_range = date_range + timedelta(days=7)
+        print(f"[DEBUG] Parsed date_range: {date_range}")
 
-    # Check if input looks like a month (e.g., "july 2025") but not a specific date
-    month_keywords = [
-        "january", "february", "march", "april", "may", "june",
-        "july", "august", "september", "october", "november", "december"
-    ]
-    # Only consider it a month request if:
-    # 1. Contains a month name AND
-    # 2. Does NOT contain day indicators (numbers 1-31, "st", "nd", "rd", "th")
-    has_month = any(m in natural_range for m in month_keywords)
-    has_day_indicator = any(str(i) in natural_range for i in range(1, 32)) or any(suffix in natural_range for suffix in ["st", "nd", "rd", "th"])
-    is_month = has_month and not has_day_indicator
+        # Check if input looks like a month (e.g., "july 2025") but not a specific date
+        month_keywords = [
+            "january", "february", "march", "april", "may", "june",
+            "july", "august", "september", "october", "november", "december"
+        ]
+        # Only consider it a month request if:
+        # 1. Contains a month name AND
+        # 2. Does NOT contain day indicators (numbers 1-31, "st", "nd", "rd", "th")
+        has_month = any(m in natural_range for m in month_keywords)
+        has_day_indicator = any(str(i) in natural_range for i in range(1, 32)) or any(suffix in natural_range for suffix in ["st", "nd", "rd", "th"])
+        is_month = has_month and not has_day_indicator
 
-    if is_month and date_range:
-        start_time = date_range.replace(day=1)
-        end_time = (start_time + relativedelta(months=1)) - timedelta(seconds=1)
-        print(f"[DEBUG] Detected month -> start: {start_time}, end: {end_time}")
+        if is_month and date_range:
+            start_time = date_range.replace(day=1)
+            end_time = (start_time + relativedelta(months=1)) - timedelta(seconds=1)
+            print(f"[DEBUG] Detected month -> start: {start_time}, end: {end_time}")
 
-    elif " to " in natural_range or " until " in natural_range:
-        parts = natural_range.split(" to ") if " to " in natural_range else natural_range.split(" until ")
-        parts = [p.strip() for p in parts]
-        start = dateparser.parse(parts[0], settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True})
-        end = dateparser.parse(parts[1], settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True})
-        if not start or not end:
-            return "❌ Sorry, I couldn't understand that date range."
-        start_time = start
-        end_time = end + timedelta(hours=23, minutes=59)
-        print(f"[DEBUG] Range match -> start: {start_time}, end: {end_time}")
+        elif " to " in natural_range or " until " in natural_range:
+            parts = natural_range.split(" to ") if " to " in natural_range else natural_range.split(" until ")
+            parts = [p.strip() for p in parts]
+            start = dateparser.parse(parts[0], settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True})
+            end = dateparser.parse(parts[1], settings={"TIMEZONE": "Asia/Kuala_Lumpur", "RETURN_AS_TIMEZONE_AWARE": True})
+            if not start or not end:
+                return "❌ Sorry, I couldn't understand that date range."
+            start_time = start
+            end_time = end + timedelta(hours=23, minutes=59)
+            print(f"[DEBUG] Range match -> start: {start_time}, end: {end_time}")
 
-    elif date_range:
-        # Normalize to full-day window in Asia/Kuala_Lumpur
-        start_time = date_range.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
-        end_time = start_time + timedelta(days=1) - timedelta(seconds=1)
-        print(f"[DEBUG] Single day match (normalized) -> start: {start_time}, end: {end_time}")
+        elif date_range:
+            # Normalize to full-day window in Asia/Kuala_Lumpur
+            start_time = date_range.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_time = start_time + timedelta(days=1) - timedelta(seconds=1)
+            print(f"[DEBUG] Single day match (normalized) -> start: {start_time}, end: {end_time}")
 
-    else:
-        print(f"[DEBUG] Failed to parse: {natural_range}")
-        return "❌ Sorry, I couldn't understand that time."
-
-    # Fetch events
-    print(f"[DEBUG] Fetching events from {start_time.isoformat()} to {end_time.isoformat()}")
-    events_result = service.events().list(
-        calendarId='primary',
-        timeMin=start_time.isoformat(),
-        timeMax=end_time.isoformat(),
-        singleEvents=True,
-        orderBy='startTime'
-    ).execute()
-
-    events = events_result.get("items", [])
-    print(f"[DEBUG] Number of events fetched: {len(events)}")
-
-    if not events:
-        return f"📅 You have no events for {natural_range}."
-
-    # Format the events
-    reply_lines = [f"📅 Events for '{natural_range}':"]
-    for event in events:
-        title = event.get("summary", "No Title")
-        start_dt_str = event["start"].get("dateTime")
-        end_dt_str = event["end"].get("dateTime")
-        all_day_start = event["start"].get("date") is not None
-        all_day_end = event["end"].get("date") is not None
-
-        print(f"[DEBUG] Event raw -> title: {title}, start: {start_dt_str or event['start'].get('date')}, end: {end_dt_str or event['end'].get('date')}")
-
-        if all_day_start or all_day_end:
-            time_range = "All-day"
         else:
-            try:
-                start_dt = datetime.fromisoformat(start_dt_str)
-                end_dt = datetime.fromisoformat(end_dt_str)
-                time_range = f"{start_dt.strftime('%a %-I:%M%p')} until {end_dt.strftime('%-I:%M%p')}"
-            except Exception:
+            print(f"[DEBUG] Failed to parse: {natural_range}")
+            return "❌ Sorry, I couldn't understand that time."
+
+        # Fetch events
+        print(f"[DEBUG] Fetching events from {start_time.isoformat()} to {end_time.isoformat()}")
+        events_result = service.events().list(
+            calendarId='primary',
+            timeMin=start_time.isoformat(),
+            timeMax=end_time.isoformat(),
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+
+        events = events_result.get("items", [])
+        print(f"[DEBUG] Number of events fetched: {len(events)}")
+
+        if not events:
+            return f"📅 You have no events for {natural_range}."
+
+        # Format the events
+        reply_lines = [f"📅 Events for '{natural_range}':"]
+        for event in events:
+            title = event.get("summary", "No Title")
+            start_dt_str = event["start"].get("dateTime")
+            end_dt_str = event["end"].get("dateTime")
+            all_day_start = event["start"].get("date") is not None
+            all_day_end = event["end"].get("date") is not None
+
+            print(f"[DEBUG] Event raw -> title: {title}, start: {start_dt_str or event['start'].get('date')}, end: {end_dt_str or event['end'].get('date')}")
+
+            if all_day_start or all_day_end:
                 time_range = "All-day"
+            else:
+                try:
+                    start_dt = datetime.fromisoformat(start_dt_str)
+                    end_dt = datetime.fromisoformat(end_dt_str)
+                    time_range = f"{start_dt.strftime('%a %-I:%M%p')} until {end_dt.strftime('%-I:%M%p')}"
+                except Exception:
+                    time_range = "All-day"
 
-        reply_lines.append(f"{title} - {time_range}")
+            reply_lines.append(f"{title} - {time_range}")
 
-    return "\n".join(reply_lines)
+        return "\n".join(reply_lines)
+    
+    except (RefreshError, HttpError) as e:
+        # Handle expired or invalid tokens
+        print(f"[DEBUG] Token error: {e}")
+        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+            auth_url = get_auth_url(user_id)
+            return (
+                f"🔐 Oops! It seems like you haven't given me access to your calendar yet. "
+                f"Please authorize access through this link:\n{auth_url}\n\n"
+                f"Alternatively, you can manage your external app integration through your dashboard:\n"
+                f"https://lofy-assistant.vercel.app/dashboard/integration"
+            )
+        else:
+            # Re-raise if it's a different type of error
+            raise e
+    except Exception as e:
+        # Handle any other unexpected errors
+        print(f"[DEBUG] Unexpected error in get_events: {e}")
+        # Check if the error message contains token expiration indicators
+        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+            auth_url = get_auth_url(user_id)
+            return (
+                f"🔐 Oops! It seems like you haven't given me access to your calendar yet. "
+                f"Please authorize access through this link:\n{auth_url}\n\n"
+                f"Alternatively, you can manage your external app integration through your dashboard:\n"
+                f"https://lofy-assistant.vercel.app/dashboard/integration"
+            )
+        else:
+            # Re-raise if it's a different type of error
+            raise e
 
 create_event_tool = {
     "type": "function",
