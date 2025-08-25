@@ -11,7 +11,7 @@ from googleapiclient.errors import HttpError
 from google.auth.exceptions import RefreshError
 from dotenv import load_dotenv
 from db.mongo import get_all_users, oauth_tokens_collection
-from utils.utils import decrypt_phone, send_whatsapp_message, get_event_loop
+from utils.utils import decrypt_phone, send_whatsapp_message, get_event_loop, get_auth_url
 from tools.task import get_tasks
 
 load_dotenv()
@@ -35,12 +35,20 @@ today_str = now.strftime("%Y-%m-%d")
 tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
 def get_events_for_user_on_date(user_id, target_date):
+    """
+    Fetch events for a user on a specific date.
+    
+    Returns:
+        tuple: (events_list, token_expired_flag)
+        - events_list: List of events (empty if none or error)
+        - token_expired_flag: Boolean indicating if token is expired
+    """
     print("\n[EVENTS FETCH] user_id:", user_id)
     print("[EVENTS FETCH] target_date:", target_date)
     token_data = oauth_tokens_collection.find_one({"user_id": user_id})
     if not token_data:
         print("[EVENTS FETCH] No token data found for user.")
-        return []
+        return [], False  # No token data is not the same as expired token
 
     try:
         creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
@@ -59,28 +67,28 @@ def get_events_for_user_on_date(user_id, target_date):
         ).execute()
         events = events_result.get("items", [])
         print(f"[EVENTS FETCH] {len(events)} events fetched.")
-        return events
+        return events, False  # Success, no token issues
     
     except (RefreshError, HttpError) as e:
         # Handle expired or invalid tokens
         print(f"[ERROR] Token error for user {user_id}: {e}")
         if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
-            print(f"[EVENTS FETCH] Token expired for user {user_id}. Skipping calendar events.")
-            return []
+            print(f"[EVENTS FETCH] Token expired for user {user_id}.")
+            return [], True  # Return empty events and token expired flag
         else:
             # Re-raise if it's a different type of error
             print(f"[ERROR] Non-token related error for user {user_id}: {e}")
-            return []
+            return [], False
     except Exception as e:
         # Handle any other unexpected errors
         print(f"[ERROR] Unexpected error fetching events for user {user_id}: {e}")
         # Check if the error message contains token expiration indicators
         if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
-            print(f"[EVENTS FETCH] Token expired for user {user_id}. Skipping calendar events.")
-            return []
+            print(f"[EVENTS FETCH] Token expired for user {user_id}.")
+            return [], True  # Return empty events and token expired flag
         else:
             print(f"[ERROR] Failed to fetch events for user {user_id}: {e}")
-            return []
+            return [], False
 
 def format_event_reminder(events, date):
     if not events:
@@ -124,6 +132,18 @@ def format_task_reminder(tasks):
         lines.append(f"{status_emoji} {priority_emoji} {title} ({status_text})")
     
     return "\n".join(lines)
+
+def format_token_expiration_message(user_id, nickname):
+    """Format message for when Google Calendar token has expired"""
+    auth_url = get_auth_url(user_id)
+    return (
+        f"Hi {nickname}! 🔐\n\n"
+        f"I noticed your Google Calendar access has expired. To continue receiving your daily calendar updates, "
+        f"please reconnect your Google Calendar:\n\n"
+        f"🔗 Quick reconnect: {auth_url}\n\n"
+        f"Or visit your dashboard: https://lofy-assistant.vercel.app/dashboard/integration\n\n"
+        f"Once reconnected, you'll continue getting your daily schedule and task reminders!"
+    )
 
 def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     """Combine events and tasks into a comprehensive daily reminder"""
@@ -214,8 +234,26 @@ def start_scheduler():
                 print(f"[TODAY REMINDER JOB] Fetching data for user_id: {user_id}")
                 
                 # Fetch events for today
-                events = get_events_for_user_on_date(user_id, today)
-                print(f"[TODAY REMINDER JOB] Found {len(events)} events for user {user_id}")
+                events, token_expired = get_events_for_user_on_date(user_id, today)
+                print(f"[TODAY REMINDER JOB] Found {len(events)} events for user {user_id}, token_expired: {token_expired}")
+                
+                # If token is expired, send expiration notification
+                if token_expired:
+                    message = format_token_expiration_message(user_id, nickname)
+                    print(f"[TODAY REMINDER JOB] Sending token expiration notification to user {user_id}")
+                    if not TEST_MODE:
+                        print(message)
+                    
+                    # Choose send function based on test mode
+                    send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
+                    
+                    loop = get_event_loop()
+                    if loop:
+                        asyncio.run_coroutine_threadsafe(
+                            send_func(decrypted_phone, message),
+                            loop
+                        )
+                    continue  # Skip to next user, don't send regular reminder
                 
                 # Fetch pending and in-progress tasks
                 try:
@@ -277,8 +315,26 @@ def start_scheduler():
                 print(f"[TOMORROW REMINDER JOB] Fetching data for user_id: {user_id}")
                 
                 # Fetch events for tomorrow
-                events = get_events_for_user_on_date(user_id, tomorrow)
-                print(f"[TOMORROW REMINDER JOB] Found {len(events)} events for user {user_id}")
+                events, token_expired = get_events_for_user_on_date(user_id, tomorrow)
+                print(f"[TOMORROW REMINDER JOB] Found {len(events)} events for user {user_id}, token_expired: {token_expired}")
+                
+                # If token is expired, send expiration notification
+                if token_expired:
+                    message = format_token_expiration_message(user_id, nickname)
+                    print(f"[TOMORROW REMINDER JOB] Sending token expiration notification to user {user_id}")
+                    if not TEST_MODE:
+                        print(message)
+                    
+                    # Choose send function based on test mode
+                    send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
+                    
+                    loop = get_event_loop()
+                    if loop:
+                        asyncio.run_coroutine_threadsafe(
+                            send_func(decrypted_phone, message),
+                            loop
+                        )
+                    continue  # Skip to next user, don't send regular reminder
                 
                 # Fetch pending and in-progress tasks
                 try:
