@@ -169,15 +169,29 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None, phone_num
     print(f"[DEBUG] Normalized time input: '{remind_in_normalized}'")
     
     # Try to parse the natural language time
+    # First try with PREFER_DATES_FROM: "current_period" to prefer today for times like "6pm"
     reminder_time = dateparser.parse(
         remind_in_normalized,
         settings={
             "TIMEZONE": "Asia/Kuala_Lumpur",
             "RETURN_AS_TIMEZONE_AWARE": True,
             "RELATIVE_BASE": now,
-            "PREFER_DATES_FROM": "future"
+            "PREFER_DATES_FROM": "current_period"
         }
     )
+    
+    # If the parsed time is in the past, try again with "future" preference
+    if reminder_time and reminder_time <= now:
+        print(f"[DEBUG] Time is in past, trying with future preference: {reminder_time}")
+        reminder_time = dateparser.parse(
+            remind_in_normalized,
+            settings={
+                "TIMEZONE": "Asia/Kuala_Lumpur",
+                "RETURN_AS_TIMEZONE_AWARE": True,
+                "RELATIVE_BASE": now,
+                "PREFER_DATES_FROM": "future"
+            }
+        )
     
     print(f"[DEBUG] Parsed time: {reminder_time}")
     print(f"[DEBUG] Current time: {now}")
@@ -190,9 +204,23 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None, phone_num
                 "TIMEZONE": "Asia/Kuala_Lumpur",
                 "RETURN_AS_TIMEZONE_AWARE": True,
                 "RELATIVE_BASE": now,
-                "PREFER_DATES_FROM": "future"
+                "PREFER_DATES_FROM": "current_period"
             }
         )
+        
+        # If the parsed time is in the past, try again with "future" preference  
+        if reminder_time and reminder_time <= now:
+            print(f"[DEBUG] Fallback time is in past, trying with future preference: {reminder_time}")
+            reminder_time = dateparser.parse(
+                remind_in,
+                settings={
+                    "TIMEZONE": "Asia/Kuala_Lumpur",
+                    "RETURN_AS_TIMEZONE_AWARE": True,
+                    "RELATIVE_BASE": now,
+                    "PREFER_DATES_FROM": "future"
+                }
+            )
+        
         print(f"[DEBUG] Fallback parsed time: {reminder_time}")
     
     if not reminder_time:
@@ -377,7 +405,7 @@ create_custom_reminder_tool = {
                 },
                 "remind_in": {
                     "type": "string",
-                    "description": "When to send the reminder in natural language. Extract the time portion from user input and normalize it. Examples: 'in 30 minutes', '3 hours', 'tomorrow at 9am', '2 days from now'. Common user phrases like 'the next 30 mins' should be extracted as '30 minutes', 'next hour' as '1 hour', etc."
+                    "description": "When to send the reminder in natural language. IMPORTANT: Pass the user's original time expression, do NOT convert to specific dates. Examples: 'in 30 minutes', '3 hours', 'tomorrow at 9am', '6pm', '30 minutes'. Common user phrases like 'the next 30 mins' should be extracted as '30 minutes', 'next hour' as '1 hour', etc. DO NOT use date formats like '2025-08-26 18:00'."
                 }
             },
             "required": ["message", "remind_in"]
