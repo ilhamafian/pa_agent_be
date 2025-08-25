@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from google.auth.exceptions import RefreshError
 from dotenv import load_dotenv
 from db.mongo import get_all_users, oauth_tokens_collection
 from utils.utils import decrypt_phone, send_whatsapp_message, get_event_loop
@@ -40,14 +42,14 @@ def get_events_for_user_on_date(user_id, target_date):
         print("[EVENTS FETCH] No token data found for user.")
         return []
 
-    creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-
-    tz = pytz.timezone("Asia/Kuala_Lumpur")
-    start_time = tz.localize(datetime.combine(target_date, datetime.min.time()))
-    end_time = tz.localize(datetime.combine(target_date, datetime.max.time()))
-
     try:
+        creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+        tz = pytz.timezone("Asia/Kuala_Lumpur")
+        start_time = tz.localize(datetime.combine(target_date, datetime.min.time()))
+        end_time = tz.localize(datetime.combine(target_date, datetime.max.time()))
+
         events_result = service.events().list(
             calendarId='primary',
             timeMin=start_time.isoformat(),
@@ -58,9 +60,27 @@ def get_events_for_user_on_date(user_id, target_date):
         events = events_result.get("items", [])
         print(f"[EVENTS FETCH] {len(events)} events fetched.")
         return events
+    
+    except (RefreshError, HttpError) as e:
+        # Handle expired or invalid tokens
+        print(f"[ERROR] Token error for user {user_id}: {e}")
+        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+            print(f"[EVENTS FETCH] Token expired for user {user_id}. Skipping calendar events.")
+            return []
+        else:
+            # Re-raise if it's a different type of error
+            print(f"[ERROR] Non-token related error for user {user_id}: {e}")
+            return []
     except Exception as e:
-        print(f"[ERROR] Failed to fetch events for user {user_id}: {e}")
-        return []
+        # Handle any other unexpected errors
+        print(f"[ERROR] Unexpected error fetching events for user {user_id}: {e}")
+        # Check if the error message contains token expiration indicators
+        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+            print(f"[EVENTS FETCH] Token expired for user {user_id}. Skipping calendar events.")
+            return []
+        else:
+            print(f"[ERROR] Failed to fetch events for user {user_id}: {e}")
+            return []
 
 def format_event_reminder(events, date):
     if not events:
