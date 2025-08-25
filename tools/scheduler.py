@@ -432,11 +432,11 @@ def start_scheduler():
     # Schedule today's reminder at 9:00 AM
     scheduler.add_job(today_reminder_job, 'cron', hour=8, minute=30)
     # Schedule tomorrow's reminder at 10:40 PM
-    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=21, minute=30)
+    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=19, minute=30)
     scheduler.start()
     print("\n✅ Scheduler started with:")
     print("   • Today's reminder at 8:30 AM")
-    print("   • Tomorrow's reminder at 9:30 PM")
+    print("   • Tomorrow's reminder at 7:30 PM")
     if TEST_MODE:
         print("   🧪 RUNNING IN TEST MODE - WhatsApp messages will be mocked")
 
