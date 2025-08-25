@@ -56,9 +56,19 @@ async def send_whatsapp_message(recipient_id: str, message: str):
         "text": {"body": message}
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=data, headers=headers)
-        print("WhatsApp Send Response:", response.status_code, response.text)
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=data, headers=headers)
+            print("WhatsApp Send Response:", response.status_code, response.text)
+            
+            # Return a result object for the scheduler
+            if response.status_code == 200:
+                return {"status": "success", "status_code": response.status_code, "response": response.text}
+            else:
+                return {"status": "error", "status_code": response.status_code, "response": response.text}
+    except Exception as e:
+        print(f"WhatsApp Send Error: {e}")
+        return {"status": "error", "error": str(e)}
 
 def get_auth_url(user_id):
     print("Entered get_auth_url")

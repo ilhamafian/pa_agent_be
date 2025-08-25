@@ -351,17 +351,27 @@ def start_scheduler():
                     send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
                     
                     loop = get_event_loop()
+                    print(f"[TOMORROW REMINDER JOB] Event loop status for token expiration: {loop is not None}, running: {loop.is_running() if loop else 'N/A'}")
                     if loop:
                         try:
+                            print(f"[TOMORROW REMINDER JOB] About to send message to {decrypted_phone[:5]}...")
                             future = asyncio.run_coroutine_threadsafe(
                                 send_func(decrypted_phone, message),
                                 loop
                             )
+                            print(f"[TOMORROW REMINDER JOB] Coroutine submitted, waiting for result...")
                             # Wait for completion with timeout
                             result = future.result(timeout=30)
                             print(f"[TOMORROW REMINDER JOB] Token expiration message sent successfully to user {user_id}: {result}")
+                        except asyncio.TimeoutError:
+                            print(f"[TOMORROW REMINDER JOB] Timeout error: Message sending took longer than 30 seconds for user {user_id}")
                         except Exception as send_error:
-                            print(f"[TOMORROW REMINDER JOB] Error sending token expiration message to user {user_id}: {send_error}")
+                            print(f"[TOMORROW REMINDER JOB] Error sending token expiration message to user {user_id}")
+                            print(f"[TOMORROW REMINDER JOB] Error type: {type(send_error).__name__}")
+                            print(f"[TOMORROW REMINDER JOB] Error details: {str(send_error)}")
+                            print(f"[TOMORROW REMINDER JOB] Error repr: {repr(send_error)}")
+                            import traceback
+                            print(f"[TOMORROW REMINDER JOB] Full traceback: {traceback.format_exc()}")
                     else:
                         print(f"[TOMORROW REMINDER JOB] No event loop available for user {user_id}")
                     continue  # Skip to next user, don't send regular reminder
@@ -387,17 +397,27 @@ def start_scheduler():
                     send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
                     
                     loop = get_event_loop()
+                    print(f"[TOMORROW REMINDER JOB] Event loop status for combined reminder: {loop is not None}, running: {loop.is_running() if loop else 'N/A'}")
                     if loop:
                         try:
+                            print(f"[TOMORROW REMINDER JOB] About to send combined reminder to {decrypted_phone[:5]}...")
                             future = asyncio.run_coroutine_threadsafe(
                                 send_func(decrypted_phone, message),
                                 loop
                             )
+                            print(f"[TOMORROW REMINDER JOB] Combined reminder coroutine submitted, waiting for result...")
                             # Wait for completion with timeout
                             result = future.result(timeout=30)
                             print(f"[TOMORROW REMINDER JOB] Combined reminder sent successfully to user {user_id}: {result}")
+                        except asyncio.TimeoutError:
+                            print(f"[TOMORROW REMINDER JOB] Timeout error: Combined reminder sending took longer than 30 seconds for user {user_id}")
                         except Exception as send_error:
-                            print(f"[TOMORROW REMINDER JOB] Error sending combined reminder to user {user_id}: {send_error}")
+                            print(f"[TOMORROW REMINDER JOB] Error sending combined reminder to user {user_id}")
+                            print(f"[TOMORROW REMINDER JOB] Error type: {type(send_error).__name__}")
+                            print(f"[TOMORROW REMINDER JOB] Error details: {str(send_error)}")
+                            print(f"[TOMORROW REMINDER JOB] Error repr: {repr(send_error)}")
+                            import traceback
+                            print(f"[TOMORROW REMINDER JOB] Full traceback: {traceback.format_exc()}")
                     else:
                         print(f"[TOMORROW REMINDER JOB] No event loop available for user {user_id}")
                 else:
