@@ -168,60 +168,99 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None, phone_num
     print(f"[DEBUG] Original time input: '{remind_in}'")
     print(f"[DEBUG] Normalized time input: '{remind_in_normalized}'")
     
-    # Try to parse the natural language time
-    # First try with PREFER_DATES_FROM: "current_period" to prefer today for times like "6pm"
-    reminder_time = dateparser.parse(
-        remind_in_normalized,
-        settings={
+    # Try to parse the natural language time with different strategies
+    parsing_strategies = [
+        # Strategy 1: Default settings
+        {
             "TIMEZONE": "Asia/Kuala_Lumpur",
             "RETURN_AS_TIMEZONE_AWARE": True,
             "RELATIVE_BASE": now,
+        },
+        # Strategy 2: Prefer current period (today)
+        {
+            "TIMEZONE": "Asia/Kuala_Lumpur", 
+            "RETURN_AS_TIMEZONE_AWARE": True,
+            "RELATIVE_BASE": now,
             "PREFER_DATES_FROM": "current_period"
+        },
+        # Strategy 3: Prefer future
+        {
+            "TIMEZONE": "Asia/Kuala_Lumpur",
+            "RETURN_AS_TIMEZONE_AWARE": True,
+            "RELATIVE_BASE": now,
+            "PREFER_DATES_FROM": "future"
         }
-    )
+    ]
     
-    # If the parsed time is in the past, try again with "future" preference
-    if reminder_time and reminder_time <= now:
-        print(f"[DEBUG] Time is in past, trying with future preference: {reminder_time}")
-        reminder_time = dateparser.parse(
-            remind_in_normalized,
-            settings={
-                "TIMEZONE": "Asia/Kuala_Lumpur",
-                "RETURN_AS_TIMEZONE_AWARE": True,
-                "RELATIVE_BASE": now,
-                "PREFER_DATES_FROM": "future"
-            }
-        )
+    reminder_time = None
+    for i, settings in enumerate(parsing_strategies):
+        print(f"[DEBUG] Trying parsing strategy {i+1} with settings: {settings}")
+        reminder_time = dateparser.parse(remind_in_normalized, settings=settings)
+        print(f"[DEBUG] Strategy {i+1} result: {reminder_time}")
+        
+        if reminder_time:
+            # If we got a result but it's in the past, continue to next strategy
+            if reminder_time <= now:
+                print(f"[DEBUG] Strategy {i+1} time is in past, trying next strategy")
+                continue
+            else:
+                print(f"[DEBUG] Strategy {i+1} successful - time is in future")
+                break
     
-    print(f"[DEBUG] Parsed time: {reminder_time}")
-    print(f"[DEBUG] Current time: {now}")
-    
+    # If normalized input didn't work, try the original input
     if not reminder_time:
-        # Try the original input if normalization didn't work
-        reminder_time = dateparser.parse(
-            remind_in,
-            settings={
-                "TIMEZONE": "Asia/Kuala_Lumpur",
-                "RETURN_AS_TIMEZONE_AWARE": True,
-                "RELATIVE_BASE": now,
-                "PREFER_DATES_FROM": "current_period"
-            }
-        )
+        print(f"[DEBUG] Normalized input failed, trying original input: '{remind_in}'")
+        for i, settings in enumerate(parsing_strategies):
+            print(f"[DEBUG] Trying original input with strategy {i+1}")
+            reminder_time = dateparser.parse(remind_in, settings=settings)
+            print(f"[DEBUG] Original input strategy {i+1} result: {reminder_time}")
+            
+            if reminder_time:
+                if reminder_time <= now:
+                    print(f"[DEBUG] Original input strategy {i+1} time is in past, trying next")
+                    continue
+                else:
+                    print(f"[DEBUG] Original input strategy {i+1} successful")
+                    break
+    
+    # Manual fallback for common time patterns that dateparser might miss
+    if not reminder_time:
+        print(f"[DEBUG] All dateparser strategies failed, trying manual parsing")
+        import re
         
-        # If the parsed time is in the past, try again with "future" preference  
-        if reminder_time and reminder_time <= now:
-            print(f"[DEBUG] Fallback time is in past, trying with future preference: {reminder_time}")
-            reminder_time = dateparser.parse(
-                remind_in,
-                settings={
-                    "TIMEZONE": "Asia/Kuala_Lumpur",
-                    "RETURN_AS_TIMEZONE_AWARE": True,
-                    "RELATIVE_BASE": now,
-                    "PREFER_DATES_FROM": "future"
-                }
-            )
+        # Try to match common time patterns like "6pm", "6:30pm", "18:00", etc.
+        time_pattern = r'^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$'
+        match = re.match(time_pattern, remind_in.lower().strip())
         
-        print(f"[DEBUG] Fallback parsed time: {reminder_time}")
+        if match:
+            hour = int(match.group(1))
+            minute = int(match.group(2)) if match.group(2) else 0
+            am_pm = match.group(3)
+            
+            # Convert to 24-hour format
+            if am_pm == 'pm' and hour != 12:
+                hour += 12
+            elif am_pm == 'am' and hour == 12:
+                hour = 0
+                
+            print(f"[DEBUG] Manual parsing - hour: {hour}, minute: {minute}")
+            
+            # Create datetime for today at the specified time
+            try:
+                reminder_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                print(f"[DEBUG] Manual parsing result (today): {reminder_time}")
+                
+                # If it's in the past, try tomorrow
+                if reminder_time <= now:
+                    reminder_time = reminder_time + timedelta(days=1)
+                    print(f"[DEBUG] Time was in past, using tomorrow: {reminder_time}")
+                    
+            except ValueError as e:
+                print(f"[DEBUG] Manual parsing failed: {e}")
+                reminder_time = None
+    
+    print(f"[DEBUG] Final parsed time: {reminder_time}")
+    print(f"[DEBUG] Current time: {now}")
     
     if not reminder_time:
         return {"status": "error", "message": f"❌ Sorry, I couldn't understand the time '{remind_in}'. Please try something like '3 hours', 'tomorrow at 9am', or 'in 30 minutes'."}
