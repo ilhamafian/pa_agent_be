@@ -249,10 +249,18 @@ def start_scheduler():
                     
                     loop = get_event_loop()
                     if loop:
-                        asyncio.run_coroutine_threadsafe(
-                            send_func(decrypted_phone, message),
-                            loop
-                        )
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(
+                                send_func(decrypted_phone, message),
+                                loop
+                            )
+                            # Wait for completion with timeout
+                            result = future.result(timeout=30)
+                            print(f"[TODAY REMINDER JOB] Token expiration message sent successfully to user {user_id}: {result}")
+                        except Exception as send_error:
+                            print(f"[TODAY REMINDER JOB] Error sending token expiration message to user {user_id}: {send_error}")
+                    else:
+                        print(f"[TODAY REMINDER JOB] No event loop available for user {user_id}")
                     continue  # Skip to next user, don't send regular reminder
                 
                 # Fetch pending and in-progress tasks
@@ -277,12 +285,24 @@ def start_scheduler():
                     
                     loop = get_event_loop()
                     if loop:
-                        asyncio.run_coroutine_threadsafe(
-                            send_func(decrypted_phone, message),
-                            loop
-                        )
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(
+                                send_func(decrypted_phone, message),
+                                loop
+                            )
+                            # Wait for completion with timeout
+                            result = future.result(timeout=30)
+                            print(f"[TODAY REMINDER JOB] Combined reminder sent successfully to user {user_id}: {result}")
+                        except Exception as send_error:
+                            print(f"[TODAY REMINDER JOB] Error sending combined reminder to user {user_id}: {send_error}")
+                    else:
+                        print(f"[TODAY REMINDER JOB] No event loop available for user {user_id}")
                 else:
                     print(f"[TODAY REMINDER JOB] No events or active tasks to notify for user {user_id}.")
+                
+                print(f"[TODAY REMINDER JOB] Completed processing for user {user_id}")
+            
+            print(f"[TODAY REMINDER JOB] Finished processing all {len(users)} users")
         except Exception as e:
             print(f"🔥 [TODAY REMINDER JOB ERROR] {e}")
 
@@ -297,6 +317,8 @@ def start_scheduler():
                 user_id = user.get("user_id")
                 nickname = user.get("nickname")
                 encrypted_phone = user.get("phone_number")
+                
+                print(f"[TOMORROW REMINDER JOB] Processing user: {user_id}")
                 
                 # Skip user if essential data is missing
                 if not user_id or not nickname or not encrypted_phone:
@@ -330,10 +352,18 @@ def start_scheduler():
                     
                     loop = get_event_loop()
                     if loop:
-                        asyncio.run_coroutine_threadsafe(
-                            send_func(decrypted_phone, message),
-                            loop
-                        )
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(
+                                send_func(decrypted_phone, message),
+                                loop
+                            )
+                            # Wait for completion with timeout
+                            result = future.result(timeout=30)
+                            print(f"[TOMORROW REMINDER JOB] Token expiration message sent successfully to user {user_id}: {result}")
+                        except Exception as send_error:
+                            print(f"[TOMORROW REMINDER JOB] Error sending token expiration message to user {user_id}: {send_error}")
+                    else:
+                        print(f"[TOMORROW REMINDER JOB] No event loop available for user {user_id}")
                     continue  # Skip to next user, don't send regular reminder
                 
                 # Fetch pending and in-progress tasks
@@ -358,23 +388,35 @@ def start_scheduler():
                     
                     loop = get_event_loop()
                     if loop:
-                        asyncio.run_coroutine_threadsafe(
-                            send_func(decrypted_phone, message),
-                            loop
-                        )
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(
+                                send_func(decrypted_phone, message),
+                                loop
+                            )
+                            # Wait for completion with timeout
+                            result = future.result(timeout=30)
+                            print(f"[TOMORROW REMINDER JOB] Combined reminder sent successfully to user {user_id}: {result}")
+                        except Exception as send_error:
+                            print(f"[TOMORROW REMINDER JOB] Error sending combined reminder to user {user_id}: {send_error}")
+                    else:
+                        print(f"[TOMORROW REMINDER JOB] No event loop available for user {user_id}")
                 else:
                     print(f"[TOMORROW REMINDER JOB] No events or active tasks to notify for user {user_id}.")
+                
+                print(f"[TOMORROW REMINDER JOB] Completed processing for user {user_id}")
+            
+            print(f"[TOMORROW REMINDER JOB] Finished processing all {len(users)} users")
         except Exception as e:
             print(f"🔥 [TOMORROW REMINDER JOB ERROR] {e}")
 
     # Schedule today's reminder at 9:00 AM
     scheduler.add_job(today_reminder_job, 'cron', hour=8, minute=30)
     # Schedule tomorrow's reminder at 10:40 PM
-    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=19, minute=30)
+    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=21, minute=30)
     scheduler.start()
     print("\n✅ Scheduler started with:")
     print("   • Today's reminder at 8:30 AM")
-    print("   • Tomorrow's reminder at 7:30 PM")
+    print("   • Tomorrow's reminder at 9:30 PM")
     if TEST_MODE:
         print("   🧪 RUNNING IN TEST MODE - WhatsApp messages will be mocked")
 
