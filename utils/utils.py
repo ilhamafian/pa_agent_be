@@ -59,15 +59,49 @@ async def send_whatsapp_message(recipient_id: str, message: str):
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, json=data, headers=headers)
-            print("WhatsApp Send Response:", response.status_code, response.text)
+            
+            # Parse the response safely
+            response_text = response.text
+            print(f"WhatsApp Send Response: {response.status_code}")
+            print(f"Response length: {len(response_text)} characters")
+            
+            # Try to parse as JSON for better handling
+            response_json = None
+            try:
+                response_json = response.json()
+                print(f"Response JSON parsed successfully")
+                # Only print the essential parts to avoid log truncation
+                if response_json.get("messages"):
+                    message_id = response_json["messages"][0].get("id")
+                    print(f"Message ID: {message_id}")
+            except Exception as json_error:
+                print(f"Failed to parse response as JSON: {json_error}")
+                print(f"Raw response text (first 200 chars): {response_text[:200]}")
+                response_json = None
             
             # Return a result object for the scheduler
             if response.status_code == 200:
-                return {"status": "success", "status_code": response.status_code, "response": response.text}
+                result = {
+                    "status": "success", 
+                    "status_code": response.status_code, 
+                    "response_json": response_json,
+                    "message_id": response_json.get("messages", [{}])[0].get("id") if response_json else None
+                }
+                print(f"WhatsApp function returning success result")
+                return result
             else:
-                return {"status": "error", "status_code": response.status_code, "response": response.text}
+                result = {
+                    "status": "error", 
+                    "status_code": response.status_code, 
+                    "response_text": response_text[:500],  # Limit response text
+                    "response_json": response_json
+                }
+                print(f"WhatsApp function returning error result")
+                return result
     except Exception as e:
         print(f"WhatsApp Send Error: {e}")
+        import traceback
+        print(f"Full error traceback: {traceback.format_exc()}")
         return {"status": "error", "error": str(e)}
 
 def get_auth_url(user_id):

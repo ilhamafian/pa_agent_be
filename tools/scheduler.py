@@ -362,7 +362,10 @@ def start_scheduler():
                             print(f"[TOMORROW REMINDER JOB] Coroutine submitted, waiting for result...")
                             # Wait for completion with timeout
                             result = future.result(timeout=30)
-                            print(f"[TOMORROW REMINDER JOB] Token expiration message sent successfully to user {user_id}: {result}")
+                            print(f"[TOMORROW REMINDER JOB] Received result from future: {result}")
+                            print(f"[TOMORROW REMINDER JOB] Token expiration message sent successfully to user {user_id}")
+                            if result and result.get("message_id"):
+                                print(f"[TOMORROW REMINDER JOB] WhatsApp Message ID: {result['message_id']}")
                         except asyncio.TimeoutError:
                             print(f"[TOMORROW REMINDER JOB] Timeout error: Message sending took longer than 30 seconds for user {user_id}")
                         except Exception as send_error:
@@ -408,7 +411,10 @@ def start_scheduler():
                             print(f"[TOMORROW REMINDER JOB] Combined reminder coroutine submitted, waiting for result...")
                             # Wait for completion with timeout
                             result = future.result(timeout=30)
-                            print(f"[TOMORROW REMINDER JOB] Combined reminder sent successfully to user {user_id}: {result}")
+                            print(f"[TOMORROW REMINDER JOB] Received combined reminder result: {result}")
+                            print(f"[TOMORROW REMINDER JOB] Combined reminder sent successfully to user {user_id}")
+                            if result and result.get("message_id"):
+                                print(f"[TOMORROW REMINDER JOB] WhatsApp Message ID: {result['message_id']}")
                         except asyncio.TimeoutError:
                             print(f"[TOMORROW REMINDER JOB] Timeout error: Combined reminder sending took longer than 30 seconds for user {user_id}")
                         except Exception as send_error:
@@ -432,7 +438,7 @@ def start_scheduler():
     # Schedule today's reminder at 9:00 AM
     scheduler.add_job(today_reminder_job, 'cron', hour=8, minute=30)
     # Schedule tomorrow's reminder at 10:40 PM
-    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=19, minute=30)
+    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=23, minute=30)
     scheduler.start()
     print("\n✅ Scheduler started with:")
     print("   • Today's reminder at 8:30 AM")
