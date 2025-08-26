@@ -55,6 +55,25 @@ async def send_whatsapp_message(recipient_id: str, message: str):
         "type": "text",
         "text": {"body": message}
     }
+    
+    # Add spam analysis debugging
+    spam_indicators = {
+        "message_length": len(message),
+        "contains_urls": "http" in message.lower(),
+        "url_count": message.lower().count("http"),
+        "contains_spam_words": any(word in message.lower() for word in [
+            'expired', 'reconnect', 'access', 'token', 'renew', 'refresh', 
+            'click here', 'tap here', 'urgent', 'verify', 'suspended'
+        ]),
+        "has_multiple_links": message.count("https://") > 1,
+        "contains_auth_url": "accounts.google.com" in message,
+        "message_type": "token_expiration" if any(word in message.lower() for word in ['calendar', 'connection', 'refresh']) else "regular"
+    }
+    
+    print(f"[SPAM ANALYSIS] Message to {recipient_id[:5]}...")
+    for key, value in spam_indicators.items():
+        print(f"[SPAM ANALYSIS] {key}: {value}")
+    print(f"[SPAM ANALYSIS] First 100 chars: {message[:100]}...")
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
