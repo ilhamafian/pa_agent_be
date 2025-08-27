@@ -494,7 +494,7 @@ def start_scheduler():
     # Schedule today's reminder at 9:00 AM
     scheduler.add_job(today_reminder_job, 'cron', hour=8, minute=30)
     # Schedule tomorrow's reminder at 10:40 PM
-    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=0, minute=20)
+    scheduler.add_job(tomorrow_reminder_job, 'cron', hour=19, minute=30)
     scheduler.start()
     print("\n✅ Scheduler started with:")
     print("   • Today's reminder at 8:30 AM")
