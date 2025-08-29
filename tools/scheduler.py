@@ -133,42 +133,54 @@ def format_task_reminder(tasks):
     
     return "\n".join(lines)
 
-def format_token_expiration_message(user_id, nickname):
-    """Format message for when Google Calendar token has expired - WhatsApp spam-friendly version"""
-    
-    # Strategy: Ultra-conservative approach to avoid ALL spam triggers
-    # Message 1: Simple, natural notification (no tech words)
-    message_1 = (
-        f"Hi {nickname}! 📅\n\n"
-        f"To keep getting your daily schedule, please update your calendar link.\n\n"
-        f"It's a quick 30-second step."
-    )
-    
-    # Message 2: Simple instruction with URL (sent 5 seconds later)
+def format_token_renewal_message(user_id):
+    """Format the second message with renewal link"""
     auth_url = get_auth_url(user_id)
-    message_2 = (
-        f"Tap here to update: {auth_url}\n\n"
+    message = (
+        f"Tap here to update: {auth_url}\n"
         f"Thanks! 😊"
     )
+    return message
+
+def format_combined_reminder_with_expired_token(tasks, nickname, is_tomorrow=True):
+    """Format reminder when token is expired but still show tasks"""
+    lines = []
     
-    # Alternative ultra-safe version (if needed for testing)
-    # message_1_safe = f"Hi {nickname}! Your daily calendar setup needs a quick update. Takes 30 seconds."
-    # message_2_safe = f"Please visit this link: {auth_url}"
+    # Add greeting based on time of day
+    if is_tomorrow:
+        lines.append(f"Hi {nickname}! Your day is wrapped up! Here's what's coming up for tomorrow:\n")
+    else:
+        lines.append(f"Good morning {nickname}! Here's what you have planned for today:\n")
     
-    # Log message characteristics for debugging
-    print(f"[TOKEN EXPIRATION] Message 1 length: {len(message_1)} characters")
-    print(f"[TOKEN EXPIRATION] Message 2 length: {len(message_2)} characters")
-    print(f"[TOKEN EXPIRATION] URL length: {len(auth_url)} characters")
+    # Add events section with token expiration notice
+    if is_tomorrow:
+        lines.append("📅 **Tomorrow's Events:**")
+        lines.append("It seems like your calendar token has expired. To keep getting your daily events brief, please update your calendar token.")
+    else:
+        lines.append("📅 **Today's Events:**")
+        lines.append("It seems like your calendar token has expired. To keep getting your daily events brief, please update your calendar token.")
+    lines.append("It's a quick 30-second step.")
+    lines.append("")  # Empty line for spacing
     
-    # Check for remaining spam indicators
-    combined = message_1 + " " + message_2
-    spam_words = ['expired', 'reconnect', 'access', 'token', 'renew', 'refresh', 'verify', 'urgent']
-    found_spam_words = [word for word in spam_words if word in combined.lower()]
-    print(f"[TOKEN EXPIRATION] Found spam words: {found_spam_words}")
-    print(f"[TOKEN EXPIRATION] Clean message (no spam words): {len(found_spam_words) == 0}")
+    # Add tasks section
+    if tasks:
+        lines.append("📝 **Tasks to Focus On:**")
+        for task in tasks:
+            title = task.get("title", "No Title")
+            status = task.get("status", "pending")
+            priority = task.get("priority", "medium")
+            
+            # Priority emojis
+            priority_emoji = "🔴" if priority == "high" else "🟡" if priority == "medium" else "🟢"
+            
+            status_text = "In Progress" if status == "in_progress" else "Pending"
+            lines.append(f"{priority_emoji} {title} ({status_text})")
     
-    # Return both messages as a tuple - scheduler will send them separately
-    return (message_1, message_2)
+    # Add motivational footer
+    footer_message = "\nHave a productive day!" if is_tomorrow else "\nLet's make today productive!"
+    lines.append(footer_message)
+    
+    return "\n".join(lines)
 
 def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     """Combine events and tasks into a comprehensive daily reminder"""
@@ -219,7 +231,7 @@ def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     
     # Add motivational footer
     if events or tasks:
-        footer_message = "\n Have a productive day!" if is_tomorrow else "\n Let's make today productive!"
+        footer_message = "\nHave a productive day!" if is_tomorrow else "\nLet's make today productive!"
         lines.append(footer_message)
     else:
         if is_tomorrow:
@@ -262,25 +274,39 @@ def start_scheduler():
                 events, token_expired = get_events_for_user_on_date(user_id, today)
                 print(f"[TODAY REMINDER JOB] Found {len(events)} events for user {user_id}, token_expired: {token_expired}")
                 
-                # If token is expired, send expiration notification (2 separate messages)
+                # Fetch pending and in-progress tasks
+                try:
+                    pending_tasks = get_tasks(user_id, status="pending") or []
+                    in_progress_tasks = get_tasks(user_id, status="in_progress") or []
+                    all_active_tasks = pending_tasks + in_progress_tasks
+                    print(f"[TODAY REMINDER JOB] Found {len(all_active_tasks)} active tasks for user {user_id}")
+                except Exception as task_error:
+                    print(f"[TODAY REMINDER JOB] Error fetching tasks for user {user_id}: {task_error}")
+                    all_active_tasks = []
+                
+                # Choose send function based on test mode
+                send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
+                loop = get_event_loop()
+                
+                # If token is expired, send combined message with token notice + tasks
                 if token_expired:
-                    messages = format_token_expiration_message(user_id, nickname)
-                    print(f"[TODAY REMINDER JOB] Sending token expiration notification (2 messages) to user {user_id}")
+                    # First message: Combined reminder with token expiration notice and tasks
+                    message1 = format_combined_reminder_with_expired_token(all_active_tasks, nickname, is_tomorrow=False)
+                    # Second message: Renewal link
+                    message2 = format_token_renewal_message(user_id)
+                    
+                    print(f"[TODAY REMINDER JOB] Sending token expiration reminder with tasks to user {user_id}")
                     
                     if not TEST_MODE:
-                        print("Message 1:", messages[0])
-                        print("Message 2:", messages[1])
+                        print("Message 1:", message1)
+                        print("Message 2:", message2)
                     
-                    # Choose send function based on test mode
-                    send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
-                    
-                    loop = get_event_loop()
                     if loop:
-                        # Send first message
                         try:
+                            # Send first message
                             print(f"[TODAY REMINDER JOB] About to send message 1 to {decrypted_phone[:5]}...")
                             future1 = asyncio.run_coroutine_threadsafe(
-                                send_func(decrypted_phone, messages[0]),
+                                send_func(decrypted_phone, message1),
                                 loop
                             )
                             result1 = future1.result(timeout=30)
@@ -293,47 +319,30 @@ def start_scheduler():
                             # Send second message
                             print(f"[TODAY REMINDER JOB] About to send message 2 to {decrypted_phone[:5]}...")
                             future2 = asyncio.run_coroutine_threadsafe(
-                                send_func(decrypted_phone, messages[1]),
+                                send_func(decrypted_phone, message2),
                                 loop
                             )
                             result2 = future2.result(timeout=30)
                             print(f"[TODAY REMINDER JOB] Message 2 sent successfully: {result2}")
-                            print(f"[TODAY REMINDER JOB] Both token expiration messages sent to user {user_id}")
                             
                         except Exception as send_error:
-                            print(f"[TODAY REMINDER JOB] Error sending token expiration messages to user {user_id}: {send_error}")
+                            print(f"[TODAY REMINDER JOB] Error sending messages to user {user_id}: {send_error}")
                     else:
                         print(f"[TODAY REMINDER JOB] No event loop available for user {user_id}")
-                    continue  # Skip to next user, don't send regular reminder
                 
-                # Fetch pending and in-progress tasks
-                try:
-                    pending_tasks = get_tasks(user_id, status="pending") or []
-                    in_progress_tasks = get_tasks(user_id, status="in_progress") or []
-                    all_active_tasks = pending_tasks + in_progress_tasks
-                    print(f"[TODAY REMINDER JOB] Found {len(all_active_tasks)} active tasks for user {user_id}")
-                except Exception as task_error:
-                    print(f"[TODAY REMINDER JOB] Error fetching tasks for user {user_id}: {task_error}")
-                    all_active_tasks = []
-                
-                # Send combined reminder if there are events or tasks
-                if events or all_active_tasks:
+                # Normal case: token not expired, send regular combined reminder
+                elif events or all_active_tasks:
                     message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=False)
                     print(f"[TODAY REMINDER JOB] Sending combined reminder to user {user_id}:")
                     if not TEST_MODE:
                         print(message)
                     
-                    # Choose send function based on test mode
-                    send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
-                    
-                    loop = get_event_loop()
                     if loop:
                         try:
                             future = asyncio.run_coroutine_threadsafe(
                                 send_func(decrypted_phone, message),
                                 loop
                             )
-                            # Wait for completion with timeout
                             result = future.result(timeout=30)
                             print(f"[TODAY REMINDER JOB] Combined reminder sent successfully to user {user_id}: {result}")
                         except Exception as send_error:
@@ -383,27 +392,40 @@ def start_scheduler():
                 events, token_expired = get_events_for_user_on_date(user_id, tomorrow)
                 print(f"[TOMORROW REMINDER JOB] Found {len(events)} events for user {user_id}, token_expired: {token_expired}")
                 
-                # If token is expired, send expiration notification (2 separate messages)
+                # Fetch pending and in-progress tasks
+                try:
+                    pending_tasks = get_tasks(user_id, status="pending") or []
+                    in_progress_tasks = get_tasks(user_id, status="in_progress") or []
+                    all_active_tasks = pending_tasks + in_progress_tasks
+                    print(f"[TOMORROW REMINDER JOB] Found {len(all_active_tasks)} active tasks for user {user_id}")
+                except Exception as task_error:
+                    print(f"[TOMORROW REMINDER JOB] Error fetching tasks for user {user_id}: {task_error}")
+                    all_active_tasks = []
+                
+                # Choose send function based on test mode
+                send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
+                loop = get_event_loop()
+                print(f"[TOMORROW REMINDER JOB] Event loop status: {loop is not None}, running: {loop.is_running() if loop else 'N/A'}")
+                
+                # If token is expired, send combined message with token notice + tasks
                 if token_expired:
-                    messages = format_token_expiration_message(user_id, nickname)
-                    print(f"[TOMORROW REMINDER JOB] Sending token expiration notification (2 messages) to user {user_id}")
+                    # First message: Combined reminder with token expiration notice and tasks
+                    message1 = format_combined_reminder_with_expired_token(all_active_tasks, nickname, is_tomorrow=True)
+                    # Second message: Renewal link
+                    message2 = format_token_renewal_message(user_id)
+                    
+                    print(f"[TOMORROW REMINDER JOB] Sending token expiration reminder with tasks to user {user_id}")
                     
                     if not TEST_MODE:
-                        print("Message 1:", messages[0])
-                        print("Message 2:", messages[1])
-                    
-                    # Choose send function based on test mode
-                    send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
-                    
-                    loop = get_event_loop()
-                    print(f"[TOMORROW REMINDER JOB] Event loop status for token expiration: {loop is not None}, running: {loop.is_running() if loop else 'N/A'}")
+                        print("Message 1:", message1)
+                        print("Message 2:", message2)
                     
                     if loop:
-                        # Send first message
                         try:
+                            # Send first message
                             print(f"[TOMORROW REMINDER JOB] About to send message 1 to {decrypted_phone[:5]}...")
                             future1 = asyncio.run_coroutine_threadsafe(
-                                send_func(decrypted_phone, messages[0]),
+                                send_func(decrypted_phone, message1),
                                 loop
                             )
                             result1 = future1.result(timeout=30)
@@ -416,47 +438,30 @@ def start_scheduler():
                             # Send second message
                             print(f"[TOMORROW REMINDER JOB] About to send message 2 to {decrypted_phone[:5]}...")
                             future2 = asyncio.run_coroutine_threadsafe(
-                                send_func(decrypted_phone, messages[1]),
+                                send_func(decrypted_phone, message2),
                                 loop
                             )
                             result2 = future2.result(timeout=30)
                             print(f"[TOMORROW REMINDER JOB] Message 2 sent successfully: {result2}")
-                            print(f"[TOMORROW REMINDER JOB] Both token expiration messages sent to user {user_id}")
                             
                         except asyncio.TimeoutError:
-                            print(f"[TOMORROW REMINDER JOB] Timeout error sending token expiration messages to user {user_id}")
+                            print(f"[TOMORROW REMINDER JOB] Timeout error sending messages to user {user_id}")
                         except Exception as send_error:
-                            print(f"[TOMORROW REMINDER JOB] Error sending token expiration messages to user {user_id}")
+                            print(f"[TOMORROW REMINDER JOB] Error sending messages to user {user_id}")
                             print(f"[TOMORROW REMINDER JOB] Error type: {type(send_error).__name__}")
                             print(f"[TOMORROW REMINDER JOB] Error details: {str(send_error)}")
                             import traceback
                             print(f"[TOMORROW REMINDER JOB] Full traceback: {traceback.format_exc()}")
                     else:
                         print(f"[TOMORROW REMINDER JOB] No event loop available for user {user_id}")
-                    continue  # Skip to next user, don't send regular reminder
                 
-                # Fetch pending and in-progress tasks
-                try:
-                    pending_tasks = get_tasks(user_id, status="pending") or []
-                    in_progress_tasks = get_tasks(user_id, status="in_progress") or []
-                    all_active_tasks = pending_tasks + in_progress_tasks
-                    print(f"[TOMORROW REMINDER JOB] Found {len(all_active_tasks)} active tasks for user {user_id}")
-                except Exception as task_error:
-                    print(f"[TOMORROW REMINDER JOB] Error fetching tasks for user {user_id}: {task_error}")
-                    all_active_tasks = []
-                
-                # Send combined reminder if there are events or tasks
-                if events or all_active_tasks:
+                # Normal case: token not expired, send regular combined reminder
+                elif events or all_active_tasks:
                     message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=True)
                     print(f"[TOMORROW REMINDER JOB] Sending combined reminder to user {user_id}:")
                     if not TEST_MODE:
                         print(message)
                     
-                    # Choose send function based on test mode
-                    send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
-                    
-                    loop = get_event_loop()
-                    print(f"[TOMORROW REMINDER JOB] Event loop status for combined reminder: {loop is not None}, running: {loop.is_running() if loop else 'N/A'}")
                     if loop:
                         try:
                             print(f"[TOMORROW REMINDER JOB] About to send combined reminder to {decrypted_phone[:5]}...")
@@ -465,7 +470,6 @@ def start_scheduler():
                                 loop
                             )
                             print(f"[TOMORROW REMINDER JOB] Combined reminder coroutine submitted, waiting for result...")
-                            # Wait for completion with timeout
                             result = future.result(timeout=30)
                             print(f"[TOMORROW REMINDER JOB] Received combined reminder result: {result}")
                             print(f"[TOMORROW REMINDER JOB] Combined reminder sent successfully to user {user_id}")
