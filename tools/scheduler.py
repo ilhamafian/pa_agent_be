@@ -154,17 +154,17 @@ def format_combined_reminder_with_expired_token(tasks, nickname, is_tomorrow=Tru
     
     # Add events section with token expiration notice
     if is_tomorrow:
-        lines.append("📅 **Tomorrow's Events:**")
+        lines.append("📅 *Tomorrow's Events:*")
         lines.append("It seems like your calendar token has expired. To keep getting your daily events brief, please update your calendar token.")
     else:
-        lines.append("📅 **Today's Events:**")
+        lines.append("📅 *Today's Events:*")
         lines.append("It seems like your calendar token has expired. To keep getting your daily events brief, please update your calendar token.")
     lines.append("It's a quick 30-second step.")
     lines.append("")  # Empty line for spacing
     
     # Add tasks section
     if tasks:
-        lines.append("📝 **Tasks to Focus On:**")
+        lines.append("📝 *Tasks to Focus On:*")
         for task in tasks:
             title = task.get("title", "No Title")
             status = task.get("status", "pending")
@@ -194,7 +194,7 @@ def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     
     # Add events section
     if events:
-        event_header = "📅 **Tomorrow's Events:**" if is_tomorrow else "📅 **Today's Events:**"
+        event_header = "📅 *Tomorrow's Events:*" if is_tomorrow else "📅 *Today's Events:*"
         lines.append(event_header)
         for event in events:
             title = event.get("summary", "No Title")
@@ -213,7 +213,7 @@ def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     
     # Add tasks section
     if tasks:
-        lines.append(f"📝 **Tasks to Focus On:**")
+        lines.append(f"📝 *Tasks to Focus On:*")
         for task in tasks:
             title = task.get("title", "No Title")
             status = task.get("status", "pending")
