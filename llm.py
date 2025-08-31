@@ -34,6 +34,12 @@ from tools.task import (
     get_tasks,
     update_task_status
 )
+from tools.notes import (
+    create_note_tool,
+    search_notes_tool,
+    create_note,
+    search_notes
+)
 from utils.utils import clean_unicode, encrypt_phone, get_auth_url, hash_data, send_whatsapp_message
 from db.mongo import client
 
@@ -56,6 +62,8 @@ tools = [
     create_task_tool,
     get_tasks_tool,
     update_task_status_tool,
+    create_note_tool,
+    search_notes_tool,
 ]
 
 now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
@@ -264,6 +272,58 @@ async def assistant_response(sender: str, text: str):
                             new_description=args.get("new_description")
                         )
                         reply = result
+
+                    elif function_name == "create_note":
+                        result = create_note(
+                            user_id=user_id,
+                            content=args["content"],
+                            title=args.get("title")
+                        )
+                        reply = (
+                            f"📝 Note Created\n\n"
+                            f"Title: {result['title']}\n"
+                            f"Content: {result['content'][:100]}{'...' if len(result['content']) > 100 else ''}\n"
+                            f"Created: {result['created_at'].strftime('%Y-%m-%d %H:%M')}"
+                        )
+
+                    elif function_name == "search_notes":
+                        notes = search_notes(
+                            user_id=user_id,
+                            query=args["query"],
+                            k=args.get("k", 5)
+                        )
+                        
+                        if not notes:
+                            reply = f"🔍 No notes found matching '{args['query']}'"
+                        else:
+                            reply_lines = [f"🔍 Found {len(notes)} note(s) for '{args['query']}':\n"]
+                            
+                            for idx, note in enumerate(notes, 1):
+                                # Format created_at if it exists
+                                created_str = ""
+                                if note.get("created_at"):
+                                    try:
+                                        if hasattr(note["created_at"], "strftime"):
+                                            created_str = f" ({note['created_at'].strftime('%Y-%m-%d')})"
+                                        else:
+                                            created_str = f" ({str(note['created_at'])[:10]})"
+                                    except:
+                                        pass
+                                
+                                reply_lines.append(f"{idx}. {note['title']}{created_str}")
+                                
+                                # Show score if available (from vector search)
+                                if note.get("score"):
+                                    reply_lines.append(f"   Relevance: {note['score']:.2f}")
+                                
+                                # Truncate content for preview
+                                content_preview = note['content'][:150]
+                                if len(note['content']) > 150:
+                                    content_preview += "..."
+                                reply_lines.append(f"   {content_preview}")
+                                reply_lines.append("")  # Blank line between notes
+                            
+                            reply = "\n".join(reply_lines).strip()
 
                     else:
                         reply = "❌ Unknown function requested."
