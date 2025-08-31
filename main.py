@@ -106,6 +106,7 @@ async def receive_whatsapp(request: Request):
                 "- 📅 Schedule events using natural language (like 'Lunch with Sarah tomorrow at 1pm')\n"
                 "- ⏰ Set reminders for anything — even 'remind me in 3 hours to check the oven'\n"
                 "- ✅ Manage tasks with priorities like high 🔴, medium 🟡, and low 🟢\n"
+                "- 📝 Save personal notes and search them later with smart suggestions\n\n"
                 "- 🧾 Detect and auto-schedule bookings from templates (great for freelancers and service providers)\n\n"
                 f"To activate your account and unlock these features, tap below:\n👉 {onboarding_url}\n\n"
                 "Once you're in, just message me here anytime. I’ve got your back! 💪"
