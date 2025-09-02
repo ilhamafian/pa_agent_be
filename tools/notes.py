@@ -31,11 +31,36 @@ def create_note(user_id: str = None, content: str = None, title: str = None) -> 
     
     # Auto-generate title if not provided
     if not title:
-        # Generate title from first few words of content (max 50 chars)
-        words = content.split()
-        title = " ".join(words[:8])  # Take first 8 words
-        if len(title) > 50:
-            title = title[:47] + "..."
+        try:
+            # Use OpenAI to generate a meaningful title
+            title_response = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": "Generate a concise, descriptive title (max 50 characters) for the following note content. The title should capture the main topic or essence of the note."
+                    },
+                    {
+                        "role": "user", 
+                        "content": content
+                    }
+                ],
+                max_tokens=20,
+                temperature=0.3
+            )
+            title = title_response.choices[0].message.content.strip()
+            
+            # Ensure title doesn't exceed 50 characters
+            if len(title) > 50:
+                title = title[:47] + "..."
+                
+        except Exception as e:
+            print(f"Error generating AI title, falling back to simple method: {e}")
+            # Fallback to simple method if AI generation fails
+            words = content.split()
+            title = " ".join(words[:8])  # Take first 8 words
+            if len(title) > 50:
+                title = title[:47] + "..."
     
     # Generate embedding for the content
     try:
@@ -174,7 +199,7 @@ create_note_tool = {
     "type": "function",
     "function": {
         "name": "create_note",
-        "description": "Creates a note with title, content, and generates an embedding for search. If title is not provided, it will be auto-generated from the content.",
+        "description": "Creates a note with title, content, and generates an embedding for search. If title is not provided, you must generate a title from the content.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -184,10 +209,10 @@ create_note_tool = {
                 },
                 "title": {
                     "type": "string",
-                    "description": "Optional title for the note. If not provided, will be auto-generated from content"
+                    "description": "Mandatory title for the note. If not provided, you must generate a title from the content"
                 }
             },
-            "required": ["content"]
+            "required": ["content", "title"]
         }
     }
 }
