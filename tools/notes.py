@@ -108,15 +108,33 @@ def search_notes(user_id: str = None, query: str = None, k: int = 5) -> list:
     if not query:
         raise ValueError("query is required for searching notes")
     
-    print(f"Searching notes for user_id: {user_id}, query: '{query}', k: {k}")
+    print(f"=== SEARCH NOTES DEBUG ===")
+    print(f"Searching notes for user_id: {user_id} (type: {type(user_id)})")
+    print(f"Query: '{query}', k: {k}")
+    
+    # First, let's check what notes exist for this user
+    try:
+        total_notes = notes_collection.count_documents({"user_id": user_id})
+        print(f"Total notes for user {user_id}: {total_notes}")
+        
+        # Show a sample of existing notes for debugging
+        sample_notes = list(notes_collection.find(
+            {"user_id": user_id},
+            {"title": 1, "content": 1, "_id": 0}
+        ).limit(3))
+        print(f"Sample notes for user: {sample_notes}")
+    except Exception as e:
+        print(f"Error checking existing notes: {e}")
     
     # Generate embedding for the search query
     try:
+        print(f"Generating embedding for query: '{query}'")
         embedding_response = openai_client.embeddings.create(
             model="text-embedding-3-small",
             input=query
         )
         query_embedding = embedding_response.data[0].embedding
+        print(f"Generated embedding with {len(query_embedding)} dimensions")
     except Exception as e:
         print(f"Error generating query embedding: {e}")
         raise ValueError("Failed to generate embedding for search query")
@@ -165,23 +183,32 @@ def search_notes(user_id: str = None, query: str = None, k: int = 5) -> list:
             }
         ]
         
+        print(f"Executing vector search pipeline: {pipeline}")
         results = list(notes_collection.aggregate(pipeline))
         
-        print(f"Found {len(results)} notes for user {user_id}")
+        print(f"Vector search results: {len(results)} notes found")
+        for i, result in enumerate(results):
+            print(f"Result {i+1}: Title='{result.get('title', 'N/A')}', Score={result.get('score', 'N/A')}")
+        
         return results
         
     except Exception as e:
         print(f"Vector search failed, falling back to text search: {e}")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error details: {str(e)}")
         
         # Fallback to text search if vector search fails
+        fallback_query = {
+            "user_id": user_id,
+            "$or": [
+                {"title": {"$regex": query, "$options": "i"}},
+                {"content": {"$regex": query, "$options": "i"}}
+            ]
+        }
+        print(f"Fallback query: {fallback_query}")
+        
         fallback_results = list(notes_collection.find(
-            {
-                "user_id": user_id,
-                "$or": [
-                    {"title": {"$regex": query, "$options": "i"}},
-                    {"content": {"$regex": query, "$options": "i"}}
-                ]
-            },
+            fallback_query,
             {
                 "_id": 0,
                 "id": 1,
@@ -192,6 +219,9 @@ def search_notes(user_id: str = None, query: str = None, k: int = 5) -> list:
         ).limit(k))
         
         print(f"Fallback search found {len(fallback_results)} notes for user {user_id}")
+        for i, result in enumerate(fallback_results):
+            print(f"Fallback Result {i+1}: Title='{result.get('title', 'N/A')}'")
+        
         return fallback_results
 
 # Tool definitions for OpenAI function calling
