@@ -37,8 +37,10 @@ from tools.task import (
 from tools.notes import (
     create_note_tool,
     search_notes_tool,
+    retrieve_note_tool,
     create_note,
-    search_notes
+    search_notes,
+    retrieve_note
 )
 from utils.utils import clean_unicode, encrypt_phone, get_auth_url, hash_data, send_whatsapp_message
 from db.mongo import client
@@ -64,6 +66,7 @@ tools = [
     update_task_status_tool,
     create_note_tool,
     search_notes_tool,
+    retrieve_note_tool,
 ]
 
 now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
@@ -323,7 +326,39 @@ async def assistant_response(sender: str, text: str):
                                 reply_lines.append(f"   {content_preview}")
                                 reply_lines.append("")  # Blank line between notes
                             
+                            if len(notes) > 0:
+                                reply_lines.append("Please type the number (1, 2, or 3) to view the full content of a note.")
+                            
                             reply = "\n".join(reply_lines).strip()
+
+                    elif function_name == "retrieve_note":
+                        try:
+                            selected_note = retrieve_note(
+                                user_id=user_id,
+                                selection=args["selection"]
+                            )
+                            
+                            # Format created_at if it exists
+                            created_str = ""
+                            if selected_note.get("created_at"):
+                                try:
+                                    if hasattr(selected_note["created_at"], "strftime"):
+                                        created_str = f"\nCreated: {selected_note['created_at'].strftime('%Y-%m-%d %H:%M')}"
+                                    else:
+                                        created_str = f"\nCreated: {str(selected_note['created_at'])}"
+                                except:
+                                    pass
+                            
+                            reply = f"📄 {selected_note['title']}{created_str}\n\n{selected_note['content']}"
+                            
+                        except ValueError as e:
+                            error_msg = str(e)
+                            if "Invalid selection" in error_msg:
+                                reply = "❌ Invalid selection. Please choose a number between 1 and 3 from the search results."
+                            elif "No previous search results" in error_msg:
+                                reply = "❌ No previous search results found. Please search for notes first before selecting one."
+                            else:
+                                reply = f"❌ {error_msg}"
 
                     else:
                         reply = "❌ Unknown function requested."

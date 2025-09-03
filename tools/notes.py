@@ -99,7 +99,10 @@ def create_note(user_id: str = None, content: str = None, title: str = None) -> 
         'created_at': note['created_at']
     }
 
-def search_notes(user_id: str = None, query: str = None, k: int = 5) -> list:
+# Global variable to store search results for retrieval
+_last_search_results = {}
+
+def search_notes(user_id: str = None, query: str = None, k: int = 3) -> list:
     """Search notes using vector similarity for a user."""
     
     if user_id is None:
@@ -140,26 +143,6 @@ def search_notes(user_id: str = None, query: str = None, k: int = 5) -> list:
         raise ValueError("Failed to generate embedding for search query")
     
     try:
-        # Perform MongoDB Atlas vector search
-        # IMPORTANT: To use vector search, you need to create a vector index in MongoDB Atlas:
-        # 1. Go to your MongoDB Atlas cluster
-        # 2. Navigate to Search > Create Search Index
-        # 3. Choose "JSON Editor" and use this configuration:
-        # {
-        #   "fields": [
-        #     {
-        #       "path": "embedding",
-        #       "type": "vector",
-        #       "numDimensions": 1536,
-        #       "similarity": "cosine"
-        #     },
-        #     {
-        #       "path": "user_id",
-        #       "type": "filter"
-        #     }
-        #   ]
-        # }
-        # 4. Name the index: "notes_vector_index"
         pipeline = [
             {
                 "$vectorSearch": {
@@ -189,6 +172,10 @@ def search_notes(user_id: str = None, query: str = None, k: int = 5) -> list:
         print(f"Vector search results: {len(results)} notes found")
         for i, result in enumerate(results):
             print(f"Result {i+1}: Title='{result.get('title', 'N/A')}', Score={result.get('score', 'N/A')}")
+        
+        # Store results for potential retrieval
+        if results:
+            _last_search_results[user_id] = results
         
         return results
         
@@ -222,7 +209,40 @@ def search_notes(user_id: str = None, query: str = None, k: int = 5) -> list:
         for i, result in enumerate(fallback_results):
             print(f"Fallback Result {i+1}: Title='{result.get('title', 'N/A')}'")
         
+        # Store results for potential retrieval
+        if fallback_results:
+            _last_search_results[user_id] = fallback_results
+        
         return fallback_results
+
+def retrieve_note(user_id: str = None, selection: int = None) -> dict:
+    """Retrieve the full content of a note based on user's selection from search results."""
+    
+    if user_id is None:
+        raise ValueError("Missing user_id in retrieve_note() call!")
+    
+    if selection is None:
+        raise ValueError("selection number is required")
+    
+    print(f"=== RETRIEVE NOTE DEBUG ===")
+    print(f"User: {user_id}, Selection: {selection}")
+    
+    # Check if user has previous search results
+    if user_id not in _last_search_results:
+        raise ValueError("No previous search results found. Please search for notes first.")
+    
+    search_results = _last_search_results[user_id]
+    print(f"Available search results: {len(search_results)}")
+    
+    # Validate selection number
+    if selection < 1 or selection > len(search_results):
+        raise ValueError(f"Invalid selection. Please choose a number between 1 and {len(search_results)}.")
+    
+    # Get the selected note (convert to 0-based index)
+    selected_note = search_results[selection - 1]
+    print(f"Selected note: {selected_note.get('title', 'N/A')}")
+    
+    return selected_note
 
 # Tool definitions for OpenAI function calling
 create_note_tool = {
@@ -251,7 +271,7 @@ search_notes_tool = {
     "type": "function",
     "function": {
         "name": "search_notes",
-        "description": "Search through user's notes using semantic similarity based on the query. Returns the most relevant notes.",
+        "description": "Search through user's notes using semantic similarity based on the query. Returns up to 3 most relevant notes for the user to choose from.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -261,10 +281,28 @@ search_notes_tool = {
                 },
                 "k": {
                     "type": "integer",
-                    "description": "Number of notes to return (default: 5, max: 10)"
+                    "description": "Number of notes to return (default: 3, max: 3)"
                 }
             },
             "required": ["query"]
+        }
+    }
+}
+
+retrieve_note_tool = {
+    "type": "function",
+    "function": {
+        "name": "retrieve_note",
+        "description": "Retrieve the full content of a specific note based on user's selection from previous search results. Call this when user provides a number (1, 2, or 3) to select a note.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selection": {
+                    "type": "integer",
+                    "description": "The number (1, 2, or 3) that the user chose from the search results"
+                }
+            },
+            "required": ["selection"]
         }
     }
 }
