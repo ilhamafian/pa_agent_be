@@ -115,7 +115,7 @@ async def send_whatsapp_message(recipient_id: str, message: str):
                     "response_text": response_text[:500],  # Limit response text
                     "response_json": response_json
                 }
-                print(f"WhatsApp function returning error result")
+                print(f"WhatsApp function returning error result: {result}")
                 return result
     except Exception as e:
         print(f"WhatsApp Send Error: {e}")
