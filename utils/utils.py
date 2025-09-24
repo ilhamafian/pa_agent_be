@@ -43,6 +43,43 @@ def encrypt_phone(phone_number: str) -> str:
 def decrypt_phone(encrypted_number: str) -> str:
     return fernet.decrypt(encrypted_number.encode()).decode()
 
+async def refresh_whatsapp_token():
+    """
+    Refresh WhatsApp access token using app credentials
+    """
+    try:
+        # Get app credentials from environment
+        app_id = os.getenv("WHATSAPP_APP_ID")
+        app_secret = os.getenv("WHATSAPP_APP_SECRET")
+        
+        if not app_id or not app_secret:
+            print("❌ WhatsApp App ID or App Secret not found in environment variables")
+            return None
+            
+        # Request new access token
+        url = "https://graph.facebook.com/oauth/access_token"
+        params = {
+            "grant_type": "client_credentials",
+            "client_id": app_id,
+            "client_secret": app_secret
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, params=params)
+            
+            if response.status_code == 200:
+                token_data = response.json()
+                new_token = token_data.get("access_token")
+                print(f"✅ WhatsApp token refreshed successfully")
+                return new_token
+            else:
+                print(f"❌ Failed to refresh WhatsApp token: {response.status_code} - {response.text}")
+                return None
+                
+    except Exception as e:
+        print(f"❌ Error refreshing WhatsApp token: {e}")
+        return None
+
 async def send_whatsapp_message(recipient_id: str, message: str):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
     headers = {
@@ -97,6 +134,52 @@ async def send_whatsapp_message(recipient_id: str, message: str):
                 print(f"Failed to parse response as JSON: {json_error}")
                 print(f"Raw response text (first 200 chars): {response_text[:200]}")
                 response_json = None
+            
+            # Check for token expiration (401 error)
+            if response.status_code == 401 and response_json and response_json.get("error"):
+                error_code = response_json["error"].get("code")
+                if error_code == 190:  # OAuthException - token expired
+                    print("🔄 WhatsApp token expired, attempting to refresh...")
+                    new_token = await refresh_whatsapp_token()
+                    
+                    if new_token:
+                        # Update the global token and retry the request
+                        global WHATSAPP_TOKEN
+                        WHATSAPP_TOKEN = new_token
+                        headers["Authorization"] = f"Bearer {new_token}"
+                        
+                        print("🔄 Retrying WhatsApp message with refreshed token...")
+                        retry_response = await client.post(url, json=data, headers=headers)
+                        
+                        if retry_response.status_code == 200:
+                            retry_json = retry_response.json()
+                            result = {
+                                "status": "success", 
+                                "status_code": retry_response.status_code, 
+                                "response_json": retry_json,
+                                "message_id": retry_json.get("messages", [{}])[0].get("id") if retry_json else None,
+                                "token_refreshed": True
+                            }
+                            print(f"✅ WhatsApp message sent successfully after token refresh")
+                            return result
+                        else:
+                            print(f"❌ Failed to send message even after token refresh: {retry_response.status_code}")
+                            return {
+                                "status": "error", 
+                                "status_code": retry_response.status_code, 
+                                "response_text": retry_response.text[:500],
+                                "response_json": retry_response.json() if retry_response.headers.get("content-type", "").startswith("application/json") else None,
+                                "token_refresh_attempted": True
+                            }
+                    else:
+                        print("❌ Failed to refresh WhatsApp token")
+                        return {
+                            "status": "error", 
+                            "status_code": response.status_code, 
+                            "response_text": response_text[:500],
+                            "response_json": response_json,
+                            "token_refresh_failed": True
+                        }
             
             # Return a result object for the scheduler
             if response.status_code == 200:
