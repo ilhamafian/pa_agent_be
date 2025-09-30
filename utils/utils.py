@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import pytz
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from db.mongo import oauth_states_collection, oauth_tokens_collection
+from db.mongo import oauth_states_collection, oauth_tokens_collection, client
 from cryptography.fernet import Fernet
 
 load_dotenv()  # Make sure environment variables are loaded
@@ -25,6 +25,10 @@ APP_URL = os.getenv("APP_URL")
 SECRET_KEY = os.getenv("TOKEN_SECRET_KEY")
 ALGORITHM = "HS256"
 fernet = Fernet(os.getenv("PHONE_ENCRYPTION_KEY"))
+
+# MongoDB setup for WhatsApp tokens
+db = client["oauth_db"]
+whatsapp_token_collection = db["whatsapp_token"]
 
 security = HTTPBearer()
 
@@ -43,6 +47,43 @@ def encrypt_phone(phone_number: str) -> str:
 def decrypt_phone(encrypted_number: str) -> str:
     return fernet.decrypt(encrypted_number.encode()).decode()
 
+def get_whatsapp_token() -> str:
+    """Get the current WhatsApp token from database or environment"""
+    try:
+        # First try to get from database
+        token_doc = whatsapp_token_collection.find_one()
+        if token_doc and token_doc.get("whatsapp_token"):
+            print("🔍 Using WhatsApp token from database")
+            return token_doc["whatsapp_token"]
+        
+        # Fallback to environment variable
+        print("🔍 Using WhatsApp token from environment variable")
+        return WHATSAPP_TOKEN
+    except Exception as e:
+        print(f"❌ Error getting WhatsApp token: {e}")
+        return WHATSAPP_TOKEN
+
+def save_whatsapp_token(token: str) -> bool:
+    """Save WhatsApp token to database for persistence"""
+    try:
+        # Update the existing document or create a new one
+        # Since user has only one document, we'll update it directly
+        result = whatsapp_token_collection.update_one(
+            {},  # Match any document (since there should be only one)
+            {
+                "$set": {
+                    "whatsapp_token": token,
+                    "updated_at": datetime.now()
+                }
+            },
+            upsert=True  # Create document if it doesn't exist
+        )
+        print("✅ WhatsApp token saved to database")
+        return True
+    except Exception as e:
+        print(f"❌ Error saving WhatsApp token: {e}")
+        return False
+
 async def refresh_whatsapp_token():
     """
     Refresh WhatsApp access token using app credentials
@@ -52,8 +93,14 @@ async def refresh_whatsapp_token():
         app_id = os.getenv("WHATSAPP_APP_ID")
         app_secret = os.getenv("WHATSAPP_APP_SECRET")
         
+        print(f"🔍 Checking environment variables...")
+        print(f"🔍 WHATSAPP_APP_ID: {'SET' if app_id else 'NOT SET'}")
+        print(f"🔍 WHATSAPP_APP_SECRET: {'SET' if app_secret else 'NOT SET'}")
+        
         if not app_id or not app_secret:
             print("❌ WhatsApp App ID or App Secret not found in environment variables")
+            print("❌ Please add WHATSAPP_APP_ID and WHATSAPP_APP_SECRET to your .env file")
+            print("❌ For now, you can manually get a new token from Facebook Developer Console")
             return None
             
         # Request new access token
@@ -82,8 +129,12 @@ async def refresh_whatsapp_token():
 
 async def send_whatsapp_message(recipient_id: str, message: str):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
+    
+    # Get current token from database or environment
+    current_token = get_whatsapp_token()
+    
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Authorization": f"Bearer {current_token}",
         "Content-Type": "application/json"
     }
     data = {
@@ -136,13 +187,37 @@ async def send_whatsapp_message(recipient_id: str, message: str):
                 response_json = None
             
             # Check for token expiration (401 error)
-            if response.status_code == 401 and response_json and response_json.get("error"):
-                error_code = response_json["error"].get("code")
-                if error_code == 190:  # OAuthException - token expired
+            if response.status_code == 401:
+                print(f"🔍 Detected 401 error, checking for token expiration...")
+                
+                # Try to parse JSON if not already parsed
+                if not response_json:
+                    try:
+                        response_json = response.json()
+                        print(f"✅ Parsed error response JSON: {response_json}")
+                    except Exception as json_error:
+                        print(f"❌ Failed to parse JSON: {json_error}")
+                        response_json = None
+                
+                # Check if it's a token expiration error
+                is_token_expired = False
+                if response_json and response_json.get("error"):
+                    error_code = response_json["error"].get("code")
+                    if error_code == 190:  # OAuthException - token expired
+                        is_token_expired = True
+                        print(f"🔍 Detected token expiration (code 190)")
+                elif "Session has expired" in response_text or "access token" in response_text.lower():
+                    is_token_expired = True
+                    print(f"🔍 Detected token expiration from response text")
+                
+                if is_token_expired:
                     print("🔄 WhatsApp token expired, attempting to refresh...")
                     new_token = await refresh_whatsapp_token()
                     
                     if new_token:
+                        # Save the new token to database for persistence
+                        save_whatsapp_token(new_token)
+                        
                         # Update the global token and retry the request
                         global WHATSAPP_TOKEN
                         WHATSAPP_TOKEN = new_token
@@ -358,3 +433,33 @@ def get_dashboard_events(user_id: str):
     except Exception as e:
         print(f"Error fetching dashboard events: {e}")
         return {"events": [], "error": str(e)}
+
+def update_whatsapp_token_manual(new_token: str) -> dict:
+    """
+    Manually update WhatsApp token in database and environment
+    Use this when automatic refresh fails or for immediate token updates
+    """
+    try:
+        # Save to database
+        if save_whatsapp_token(new_token):
+            # Update global variable for current session
+            global WHATSAPP_TOKEN
+            WHATSAPP_TOKEN = new_token
+            
+            print("✅ WhatsApp token updated successfully")
+            return {
+                "status": "success",
+                "message": "WhatsApp token updated successfully",
+                "token_saved_to_db": True
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to save token to database"
+            }
+    except Exception as e:
+        print(f"❌ Error updating WhatsApp token manually: {e}")
+        return {
+            "status": "error",
+            "message": f"Failed to update token: {str(e)}"
+        }
