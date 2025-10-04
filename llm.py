@@ -13,9 +13,11 @@ from tools.calendar import (
     create_event_tool,
     get_events_tool,
     update_event_tool,
+    delete_event_tool,
     create_event,
     get_events,
     update_event,
+    delete_event,
     AuthRequiredError
 )
 from tools.reminder import (
@@ -58,6 +60,7 @@ tools = [
     create_event_tool,
     get_events_tool,
     update_event_tool,
+    delete_event_tool,
     create_event_reminder_tool,
     create_custom_reminder_tool,
     list_reminders_tool,
@@ -151,7 +154,6 @@ async def assistant_response(sender: str, text: str):
                             f"Title: {args['title']}\n"
                             f"Date: {args['date']}\n"
                             f"{time_display}"
-                            f"Link: {result.get('htmlLink', 'Link unavailable')}"
                         )
 
                     elif function_name == "get_events":
@@ -273,6 +275,13 @@ async def assistant_response(sender: str, text: str):
                             new_start_time=args.get("new_start_time"),
                             new_end_time=args.get("new_end_time"),
                             new_description=args.get("new_description")
+                        )
+                        reply = result
+
+                    elif function_name == "delete_event":
+                        result = delete_event(
+                            user_id=user_id,
+                            title=args["title"]
                         )
                         reply = result
 
