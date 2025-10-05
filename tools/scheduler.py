@@ -5,12 +5,13 @@ import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from google.auth.exceptions import RefreshError
+# GOOGLE CALENDAR IMPORTS - COMMENTED OUT
+# from google.oauth2.credentials import Credentials
+# from googleapiclient.discovery import build
+# from googleapiclient.errors import HttpError
+# from google.auth.exceptions import RefreshError
 from dotenv import load_dotenv
-from db.mongo import get_all_users, oauth_tokens_collection
+from db.mongo import get_all_users, db  # Added db import for calendar collection
 from utils.utils import decrypt_phone, send_whatsapp_message, get_event_loop, get_auth_url
 from tools.task import get_tasks
 
@@ -27,7 +28,11 @@ async def mock_send_whatsapp_message(phone_number, message):
     print("=" * 60)
     return {"status": "mock_success", "message_id": "test_12345"}
 
-SCOPES = json.loads(os.getenv("SCOPES", "[]"))
+# GOOGLE CALENDAR SCOPES - COMMENTED OUT
+# SCOPES = json.loads(os.getenv("SCOPES", "[]"))
+
+# MongoDB calendar collection
+calendar_collection = db["calendar"]
 
 scheduler = BackgroundScheduler(timezone="Asia/Kuala_Lumpur")
 now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
@@ -36,59 +41,92 @@ tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
 def get_events_for_user_on_date(user_id, target_date):
     """
-    Fetch events for a user on a specific date.
+    Fetch events for a user on a specific date from MongoDB.
     
     Returns:
         tuple: (events_list, token_expired_flag)
         - events_list: List of events (empty if none or error)
-        - token_expired_flag: Boolean indicating if token is expired
+        - token_expired_flag: Boolean indicating if token is expired (always False for MongoDB)
     """
+    
+    # ============ GOOGLE CALENDAR CODE - COMMENTED OUT ============
+    # print("\n[EVENTS FETCH] user_id:", user_id)
+    # print("[EVENTS FETCH] target_date:", target_date)
+    # token_data = oauth_tokens_collection.find_one({"user_id": user_id})
+    # if not token_data:
+    #     print("[EVENTS FETCH] No token data found for user.")
+    #     return [], False  # No token data is not the same as expired token
+    # 
+    # try:
+    #     creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
+    #     service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    # 
+    #     tz = pytz.timezone("Asia/Kuala_Lumpur")
+    #     start_time = tz.localize(datetime.combine(target_date, datetime.min.time()))
+    #     end_time = tz.localize(datetime.combine(target_date, datetime.max.time()))
+    # 
+    #     events_result = service.events().list(
+    #         calendarId='primary',
+    #         timeMin=start_time.isoformat(),
+    #         timeMax=end_time.isoformat(),
+    #         singleEvents=True,
+    #         orderBy='startTime'
+    #     ).execute()
+    #     events = events_result.get("items", [])
+    #     print(f"[EVENTS FETCH] {len(events)} events fetched.")
+    #     return events, False  # Success, no token issues
+    # 
+    # except (RefreshError, HttpError) as e:
+    #     print(f"[ERROR] Token error for user {user_id}: {e}")
+    #     if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+    #         print(f"[EVENTS FETCH] Token expired for user {user_id}.")
+    #         return [], True  # Return empty events and token expired flag
+    #     else:
+    #         print(f"[ERROR] Non-token related error for user {user_id}: {e}")
+    #         return [], False
+    # except Exception as e:
+    #     print(f"[ERROR] Unexpected error fetching events for user {user_id}: {e}")
+    #     if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
+    #         print(f"[EVENTS FETCH] Token expired for user {user_id}.")
+    #         return [], True  # Return empty events and token expired flag
+    #     else:
+    #         print(f"[ERROR] Failed to fetch events for user {user_id}: {e}")
+    #         return [], False
+    # ============ END GOOGLE CALENDAR CODE ============
+    
+    # ============ MONGODB IMPLEMENTATION ============
     print("\n[EVENTS FETCH] user_id:", user_id)
     print("[EVENTS FETCH] target_date:", target_date)
-    token_data = oauth_tokens_collection.find_one({"user_id": user_id})
-    if not token_data:
-        print("[EVENTS FETCH] No token data found for user.")
-        return [], False  # No token data is not the same as expired token
-
+    
     try:
-        creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-
         tz = pytz.timezone("Asia/Kuala_Lumpur")
         start_time = tz.localize(datetime.combine(target_date, datetime.min.time()))
         end_time = tz.localize(datetime.combine(target_date, datetime.max.time()))
-
-        events_result = service.events().list(
-            calendarId='primary',
-            timeMin=start_time.isoformat(),
-            timeMax=end_time.isoformat(),
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute()
-        events = events_result.get("items", [])
-        print(f"[EVENTS FETCH] {len(events)} events fetched.")
-        return events, False  # Success, no token issues
+        
+        # Query MongoDB for events within the date range
+        events = list(calendar_collection.find({
+            "user_id": user_id,
+            "start_time": {"$gte": start_time, "$lte": end_time}
+        }).sort("start_time", 1))  # Sort by start_time ascending
+        
+        print(f"[EVENTS FETCH] {len(events)} events fetched from MongoDB.")
+        
+        # Convert MongoDB events to match Google Calendar format for compatibility
+        formatted_events = []
+        for event in events:
+            formatted_event = {
+                "summary": event.get("summary", "No Title"),
+                "start": event.get("start", {}),
+                "end": event.get("end", {}),
+                "description": event.get("description", "")
+            }
+            formatted_events.append(formatted_event)
+        
+        return formatted_events, False  # Success, no token issues (MongoDB doesn't use tokens)
     
-    except (RefreshError, HttpError) as e:
-        # Handle expired or invalid tokens
-        print(f"[ERROR] Token error for user {user_id}: {e}")
-        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
-            print(f"[EVENTS FETCH] Token expired for user {user_id}.")
-            return [], True  # Return empty events and token expired flag
-        else:
-            # Re-raise if it's a different type of error
-            print(f"[ERROR] Non-token related error for user {user_id}: {e}")
-            return [], False
     except Exception as e:
-        # Handle any other unexpected errors
-        print(f"[ERROR] Unexpected error fetching events for user {user_id}: {e}")
-        # Check if the error message contains token expiration indicators
-        if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
-            print(f"[EVENTS FETCH] Token expired for user {user_id}.")
-            return [], True  # Return empty events and token expired flag
-        else:
-            print(f"[ERROR] Failed to fetch events for user {user_id}: {e}")
-            return [], False
+        print(f"[ERROR] Failed to fetch events from MongoDB for user {user_id}: {e}")
+        return [], False
 
 def format_event_reminder(events, date):
     if not events:
@@ -133,54 +171,52 @@ def format_task_reminder(tasks):
     
     return "\n".join(lines)
 
-def format_token_renewal_message(user_id):
-    """Format the second message with renewal link"""
-    auth_url = get_auth_url(user_id)
-    message = (
-        f"Tap here to update: {auth_url}\n"
-        f"Thanks! 😊"
-    )
-    return message
-
-def format_combined_reminder_with_expired_token(tasks, nickname, is_tomorrow=True):
-    """Format reminder when token is expired but still show tasks"""
-    lines = []
-    
-    # Add greeting based on time of day
-    if is_tomorrow:
-        lines.append(f"Hi {nickname}! Your day is wrapped up! Here's what's coming up for tomorrow:\n")
-    else:
-        lines.append(f"Good morning {nickname}! Here's what you have planned for today:\n")
-    
-    # Add events section with token expiration notice
-    if is_tomorrow:
-        lines.append("📅 *Tomorrow's Events:*")
-        lines.append("It seems like your calendar token has expired. To keep getting your daily events brief, please update your calendar token.")
-    else:
-        lines.append("📅 *Today's Events:*")
-        lines.append("It seems like your calendar token has expired. To keep getting your daily events brief, please update your calendar token.")
-    lines.append("It's a quick 30-second step.")
-    lines.append("")  # Empty line for spacing
-    
-    # Add tasks section
-    if tasks:
-        lines.append("📝 *Tasks to Focus On:*")
-        for task in tasks:
-            title = task.get("title", "No Title")
-            status = task.get("status", "pending")
-            priority = task.get("priority", "medium")
-            
-            # Priority emojis
-            priority_emoji = "🔴" if priority == "high" else "🟡" if priority == "medium" else "🟢"
-            
-            status_text = "In Progress" if status == "in_progress" else "Pending"
-            lines.append(f"{priority_emoji} {title} ({status_text})")
-    
-    # Add motivational footer
-    footer_message = "\nHave a productive day!" if is_tomorrow else "\nLet's make today productive!"
-    lines.append(footer_message)
-    
-    return "\n".join(lines)
+# ============ GOOGLE CALENDAR TOKEN FUNCTIONS - COMMENTED OUT ============
+# These functions are no longer needed with MongoDB storage
+# def format_token_renewal_message(user_id):
+#     """Format the second message with renewal link"""
+#     auth_url = get_auth_url(user_id)
+#     message = (
+#         f"Tap here to update: {auth_url}\n"
+#         f"Thanks! 😊"
+#     )
+#     return message
+# 
+# def format_combined_reminder_with_expired_token(tasks, nickname, is_tomorrow=True):
+#     """Format reminder when token is expired but still show tasks"""
+#     lines = []
+#     
+#     if is_tomorrow:
+#         lines.append(f"Hi {nickname}! Your day is wrapped up! Here's what's coming up for tomorrow:\n")
+#     else:
+#         lines.append(f"Good morning {nickname}! Here's what you have planned for today:\n")
+#     
+#     if is_tomorrow:
+#         lines.append("📅 *Tomorrow's Events:*")
+#         lines.append("It seems like your calendar token has expired. To keep getting your daily events brief, please update your calendar token.")
+#     else:
+#         lines.append("📅 *Today's Events:*")
+#         lines.append("It seems like your calendar token has expired. To keep getting your daily events brief, please update your calendar token.")
+#     lines.append("It's a quick 30-second step.")
+#     lines.append("")
+#     
+#     if tasks:
+#         lines.append("📝 *Tasks to Focus On:*")
+#         for task in tasks:
+#             title = task.get("title", "No Title")
+#             status = task.get("status", "pending")
+#             priority = task.get("priority", "medium")
+#             
+#             priority_emoji = "🔴" if priority == "high" else "🟡" if priority == "medium" else "🟢"
+#             
+#             status_text = "In Progress" if status == "in_progress" else "Pending"
+#             lines.append(f"{priority_emoji} {title} ({status_text})")
+#     
+#     footer_message = "\nHave a productive day!" if is_tomorrow else "\nLet's make today productive!"
+#     lines.append(footer_message)
+#     
+#     return "\n".join(lines)
+# ============ END GOOGLE CALENDAR TOKEN FUNCTIONS ============
 
 def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     """Combine events and tasks into a comprehensive daily reminder"""
@@ -288,50 +324,34 @@ def start_scheduler():
                 send_func = mock_send_whatsapp_message if TEST_MODE else send_whatsapp_message
                 loop = get_event_loop()
                 
-                # If token is expired, send combined message with token notice + tasks
-                if token_expired:
-                    # First message: Combined reminder with token expiration notice and tasks
-                    message1 = format_combined_reminder_with_expired_token(all_active_tasks, nickname, is_tomorrow=False)
-                    # Second message: Renewal link
-                    message2 = format_token_renewal_message(user_id)
-                    
-                    print(f"[TODAY REMINDER JOB] Sending token expiration reminder with tasks to user {user_id}")
-                    
-                    if not TEST_MODE:
-                        print("Message 1:", message1)
-                        print("Message 2:", message2)
-                    
-                    if loop:
-                        try:
-                            # Send first message
-                            print(f"[TODAY REMINDER JOB] About to send message 1 to {decrypted_phone[:5]}...")
-                            future1 = asyncio.run_coroutine_threadsafe(
-                                send_func(decrypted_phone, message1),
-                                loop
-                            )
-                            result1 = future1.result(timeout=30)
-                            print(f"[TODAY REMINDER JOB] Message 1 sent successfully: {result1}")
-                            
-                            # Wait 5 seconds between messages to avoid spam detection
-                            import time
-                            time.sleep(5)
-                            
-                            # Send second message
-                            print(f"[TODAY REMINDER JOB] About to send message 2 to {decrypted_phone[:5]}...")
-                            future2 = asyncio.run_coroutine_threadsafe(
-                                send_func(decrypted_phone, message2),
-                                loop
-                            )
-                            result2 = future2.result(timeout=30)
-                            print(f"[TODAY REMINDER JOB] Message 2 sent successfully: {result2}")
-                            
-                        except Exception as send_error:
-                            print(f"[TODAY REMINDER JOB] Error sending messages to user {user_id}: {send_error}")
-                    else:
-                        print(f"[TODAY REMINDER JOB] No event loop available for user {user_id}")
+                # ============ GOOGLE CALENDAR TOKEN EXPIRATION LOGIC - COMMENTED OUT ============
+                # if token_expired:
+                #     message1 = format_combined_reminder_with_expired_token(all_active_tasks, nickname, is_tomorrow=False)
+                #     message2 = format_token_renewal_message(user_id)
+                #     print(f"[TODAY REMINDER JOB] Sending token expiration reminder with tasks to user {user_id}")
+                #     if not TEST_MODE:
+                #         print("Message 1:", message1)
+                #         print("Message 2:", message2)
+                #     if loop:
+                #         try:
+                #             print(f"[TODAY REMINDER JOB] About to send message 1 to {decrypted_phone[:5]}...")
+                #             future1 = asyncio.run_coroutine_threadsafe(send_func(decrypted_phone, message1), loop)
+                #             result1 = future1.result(timeout=30)
+                #             print(f"[TODAY REMINDER JOB] Message 1 sent successfully: {result1}")
+                #             import time
+                #             time.sleep(5)
+                #             print(f"[TODAY REMINDER JOB] About to send message 2 to {decrypted_phone[:5]}...")
+                #             future2 = asyncio.run_coroutine_threadsafe(send_func(decrypted_phone, message2), loop)
+                #             result2 = future2.result(timeout=30)
+                #             print(f"[TODAY REMINDER JOB] Message 2 sent successfully: {result2}")
+                #         except Exception as send_error:
+                #             print(f"[TODAY REMINDER JOB] Error sending messages to user {user_id}: {send_error}")
+                #     else:
+                #         print(f"[TODAY REMINDER JOB] No event loop available for user {user_id}")
+                # ============ END GOOGLE CALENDAR TOKEN EXPIRATION LOGIC ============
                 
-                # Normal case: token not expired, send regular combined reminder
-                elif events or all_active_tasks:
+                # MongoDB: Send regular combined reminder if there are events or tasks
+                if events or all_active_tasks:
                     message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=False)
                     print(f"[TODAY REMINDER JOB] Sending combined reminder to user {user_id}:")
                     if not TEST_MODE:
@@ -407,56 +427,40 @@ def start_scheduler():
                 loop = get_event_loop()
                 print(f"[TOMORROW REMINDER JOB] Event loop status: {loop is not None}, running: {loop.is_running() if loop else 'N/A'}")
                 
-                # If token is expired, send combined message with token notice + tasks
-                if token_expired:
-                    # First message: Combined reminder with token expiration notice and tasks
-                    message1 = format_combined_reminder_with_expired_token(all_active_tasks, nickname, is_tomorrow=True)
-                    # Second message: Renewal link
-                    message2 = format_token_renewal_message(user_id)
-                    
-                    print(f"[TOMORROW REMINDER JOB] Sending token expiration reminder with tasks to user {user_id}")
-                    
-                    if not TEST_MODE:
-                        print("Message 1:", message1)
-                        print("Message 2:", message2)
-                    
-                    if loop:
-                        try:
-                            # Send first message
-                            print(f"[TOMORROW REMINDER JOB] About to send message 1 to {decrypted_phone[:5]}...")
-                            future1 = asyncio.run_coroutine_threadsafe(
-                                send_func(decrypted_phone, message1),
-                                loop
-                            )
-                            result1 = future1.result(timeout=30)
-                            print(f"[TOMORROW REMINDER JOB] Message 1 sent successfully: {result1}")
-                            
-                            # Wait 5 seconds between messages to avoid spam detection
-                            import time
-                            time.sleep(5)
-                            
-                            # Send second message
-                            print(f"[TOMORROW REMINDER JOB] About to send message 2 to {decrypted_phone[:5]}...")
-                            future2 = asyncio.run_coroutine_threadsafe(
-                                send_func(decrypted_phone, message2),
-                                loop
-                            )
-                            result2 = future2.result(timeout=30)
-                            print(f"[TOMORROW REMINDER JOB] Message 2 sent successfully: {result2}")
-                            
-                        except asyncio.TimeoutError:
-                            print(f"[TOMORROW REMINDER JOB] Timeout error sending messages to user {user_id}")
-                        except Exception as send_error:
-                            print(f"[TOMORROW REMINDER JOB] Error sending messages to user {user_id}")
-                            print(f"[TOMORROW REMINDER JOB] Error type: {type(send_error).__name__}")
-                            print(f"[TOMORROW REMINDER JOB] Error details: {str(send_error)}")
-                            import traceback
-                            print(f"[TOMORROW REMINDER JOB] Full traceback: {traceback.format_exc()}")
-                    else:
-                        print(f"[TOMORROW REMINDER JOB] No event loop available for user {user_id}")
+                # ============ GOOGLE CALENDAR TOKEN EXPIRATION LOGIC - COMMENTED OUT ============
+                # if token_expired:
+                #     message1 = format_combined_reminder_with_expired_token(all_active_tasks, nickname, is_tomorrow=True)
+                #     message2 = format_token_renewal_message(user_id)
+                #     print(f"[TOMORROW REMINDER JOB] Sending token expiration reminder with tasks to user {user_id}")
+                #     if not TEST_MODE:
+                #         print("Message 1:", message1)
+                #         print("Message 2:", message2)
+                #     if loop:
+                #         try:
+                #             print(f"[TOMORROW REMINDER JOB] About to send message 1 to {decrypted_phone[:5]}...")
+                #             future1 = asyncio.run_coroutine_threadsafe(send_func(decrypted_phone, message1), loop)
+                #             result1 = future1.result(timeout=30)
+                #             print(f"[TOMORROW REMINDER JOB] Message 1 sent successfully: {result1}")
+                #             import time
+                #             time.sleep(5)
+                #             print(f"[TOMORROW REMINDER JOB] About to send message 2 to {decrypted_phone[:5]}...")
+                #             future2 = asyncio.run_coroutine_threadsafe(send_func(decrypted_phone, message2), loop)
+                #             result2 = future2.result(timeout=30)
+                #             print(f"[TOMORROW REMINDER JOB] Message 2 sent successfully: {result2}")
+                #         except asyncio.TimeoutError:
+                #             print(f"[TOMORROW REMINDER JOB] Timeout error sending messages to user {user_id}")
+                #         except Exception as send_error:
+                #             print(f"[TOMORROW REMINDER JOB] Error sending messages to user {user_id}")
+                #             print(f"[TOMORROW REMINDER JOB] Error type: {type(send_error).__name__}")
+                #             print(f"[TOMORROW REMINDER JOB] Error details: {str(send_error)}")
+                #             import traceback
+                #             print(f"[TOMORROW REMINDER JOB] Full traceback: {traceback.format_exc()}")
+                #     else:
+                #         print(f"[TOMORROW REMINDER JOB] No event loop available for user {user_id}")
+                # ============ END GOOGLE CALENDAR TOKEN EXPIRATION LOGIC ============
                 
-                # Normal case: token not expired, send regular combined reminder
-                elif events or all_active_tasks:
+                # MongoDB: Send regular combined reminder if there are events or tasks
+                if events or all_active_tasks:
                     message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=True)
                     print(f"[TOMORROW REMINDER JOB] Sending combined reminder to user {user_id}:")
                     if not TEST_MODE:
