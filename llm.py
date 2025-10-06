@@ -72,14 +72,11 @@ tools = [
     retrieve_note_tool,
 ]
 
-now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
-today_str = now.strftime("%Y-%m-%d")
-tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
+# Load the system prompt template once at module level
 with open("system_prompt.txt", "r", encoding="utf-8") as f:
-    raw_prompt = f.read()
-    system_prompt = raw_prompt.format(today=today_str, tomorrow=tomorrow_str)
+    system_prompt_template = f.read()
 
 async def assistant_response(sender: str, text: str):
     client = OpenAI(api_key=OPENAI_API_KEY)
@@ -108,6 +105,12 @@ async def assistant_response(sender: str, text: str):
         user_input = text
 
         print(f"Processing message from {user_id}: {user_input}")
+
+        # Calculate current date/time fresh for each request
+        now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
+        today_str = now.strftime("%Y-%m-%d")
+        tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+        system_prompt = system_prompt_template.format(today=today_str, tomorrow=tomorrow_str)
 
         # Get conversation history from MongoDB (with fallback to in-memory)
         history = get_conversation_history(user_id, user_memory)
@@ -378,7 +381,7 @@ async def assistant_response(sender: str, text: str):
                         f"🔐 Oops! It seems like you haven't given me access to your calendar yet. "
                         f"Please authorize access through this link:\n{auth_url}\n\n"
                         f"Alternatively, you can manage your external app integration through your dashboard:\n"
-                        f"https://lofy-assistant.vercel.app/dashboard/integration"
+                        f"https://lofy-assistant.com/dashboard/integration"
                     )
 
                 safe_reply = clean_unicode(reply)
