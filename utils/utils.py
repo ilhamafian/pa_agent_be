@@ -47,8 +47,6 @@ def encrypt_phone(phone_number: str) -> str:
 def decrypt_phone(encrypted_number: str) -> str:
     return fernet.decrypt(encrypted_number.encode()).decode()
 
- 
-
 async def send_whatsapp_message(recipient_id: str, message: str):
     
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"

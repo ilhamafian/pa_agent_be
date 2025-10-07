@@ -19,7 +19,7 @@ from routers.dashboard import router as dashboard_router
 from tools.scheduler import start_scheduler
 from routers.llm import assistant_response
 from db.mongo import oauth_states_collection, oauth_tokens_collection
-from utils.utils import hash_data, send_whatsapp_message, update_whatsapp_token_manual
+from utils.utils import hash_data, send_whatsapp_message
 
 db = client["oauth_db"]
 users_collection = db["users"]
@@ -199,25 +199,6 @@ async def auth_callback(request: Request):
         url=f"{FRONTEND_URL}/auth-result?status=success",
         status_code=303
     )
-
-@app.post("/admin/whatsapp-token")
-async def update_whatsapp_token(request: Request):
-    """
-    Manual endpoint to update WhatsApp token
-    Usage: POST /admin/whatsapp-token with JSON body: {"token": "new_token_here"}
-    """
-    try:
-        data = await request.json()
-        new_token = data.get("token")
-        
-        if not new_token:
-            return {"status": "error", "message": "Token is required"}
-        
-        result = update_whatsapp_token_manual(new_token)
-        return result
-        
-    except Exception as e:
-        return {"status": "error", "message": f"Failed to update token: {str(e)}"}
 
 # Register your user API routes
 app.include_router(user_router)
