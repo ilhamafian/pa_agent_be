@@ -147,11 +147,18 @@ async def assistant_response(sender: str, text: str):
                             description=args.get("description"),
                             user_id=user_id
                         )
-                        time_display = (
-                            f"Time: {args['time']} - {args['end_time']}\n"
-                            if args.get("time") and args.get("end_time")
-                            else "Time: All-day\n"
-                        )
+                        # Determine time display based on what was provided
+                        if args.get("time") and args.get("end_time"):
+                            time_display = f"Time: {args['time']} - {args['end_time']}\n"
+                        elif args.get("time"):
+                            # Calculate end time (1 hour after start)
+                            from datetime import datetime, timedelta
+                            start = datetime.strptime(args['time'], "%H:%M")
+                            end = start + timedelta(hours=1)
+                            time_display = f"Time: {args['time']} - {end.strftime('%H:%M')} (1 hour)\n"
+                        else:
+                            time_display = "Time: All-day\n"
+                        
                         reply = (
                             f"📅 Calendar Event Created\n\n"
                             f"Title: {args['title']}\n"
