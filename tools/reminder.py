@@ -356,6 +356,92 @@ def send_reminder(reminder_id: str):
             {"$set": {"status": "failed", "error": str(e)}}
         )
 
+def reload_reminders():
+    """
+    Reloads all scheduled reminders from MongoDB and re-schedules them.
+    This function is called on server startup to restore reminders after a restart.
+    """
+    try:
+        from tools.scheduler import scheduler
+        
+        print("\n[REMINDER RELOAD] Starting reminder reload from MongoDB...")
+        tz = pytz.timezone("Asia/Kuala_Lumpur")
+        now = datetime.now(tz)
+        
+        # Find all scheduled reminders that haven't been sent yet
+        scheduled_reminders = list(reminders_collection.find({
+            "status": "scheduled",
+            "reminder_time": {"$exists": True}
+        }))
+        
+        print(f"[REMINDER RELOAD] Found {len(scheduled_reminders)} scheduled reminders in database")
+        
+        reloaded_count = 0
+        skipped_past_count = 0
+        error_count = 0
+        
+        for reminder in scheduled_reminders:
+            try:
+                reminder_id = str(reminder["_id"])
+                reminder_time = reminder["reminder_time"]
+                
+                # Ensure reminder_time is timezone-aware
+                if not reminder_time.tzinfo:
+                    reminder_time = tz.localize(reminder_time)
+                
+                # Check if reminder time has passed
+                if reminder_time <= now:
+                    # If within grace period (5 minutes), still schedule it
+                    time_diff = (now - reminder_time).total_seconds()
+                    if time_diff <= 300:  # 5 minutes grace period
+                        print(f"[REMINDER RELOAD] Reminder {reminder_id} is within grace period, scheduling immediately")
+                    else:
+                        print(f"[REMINDER RELOAD] Skipping past reminder {reminder_id} - was due at {reminder_time}")
+                        # Mark as missed
+                        reminders_collection.update_one(
+                            {"_id": reminder["_id"]},
+                            {"$set": {"status": "missed", "missed_at": now}}
+                        )
+                        skipped_past_count += 1
+                        continue
+                
+                # Re-schedule the reminder
+                job_id = f"reminder_{reminder_id}"
+                
+                # Check if job already exists (avoid duplicates)
+                existing_job = scheduler.get_job(job_id)
+                if existing_job:
+                    print(f"[REMINDER RELOAD] Job {job_id} already exists, skipping")
+                    continue
+                
+                scheduler.add_job(
+                    send_reminder,
+                    'date',
+                    run_date=reminder_time,
+                    args=[reminder_id],
+                    id=job_id,
+                    misfire_grace_time=300  # 5 minutes grace time
+                )
+                
+                reloaded_count += 1
+                reminder_type = reminder.get("type", "unknown")
+                print(f"[REMINDER RELOAD] Reloaded {reminder_type} reminder {reminder_id} scheduled for {reminder_time}")
+                
+            except Exception as e:
+                error_count += 1
+                print(f"[REMINDER RELOAD ERROR] Failed to reload reminder {reminder.get('_id')}: {e}")
+        
+        print(f"[REMINDER RELOAD] Complete - Reloaded: {reloaded_count}, Skipped (past): {skipped_past_count}, Errors: {error_count}")
+        return {
+            "reloaded": reloaded_count,
+            "skipped": skipped_past_count,
+            "errors": error_count
+        }
+        
+    except Exception as e:
+        print(f"[REMINDER RELOAD ERROR] Failed to reload reminders: {e}")
+        return {"error": str(e)}
+
 def list_reminders(user_id=None) -> dict:
     """
     Lists all scheduled reminders for a user.

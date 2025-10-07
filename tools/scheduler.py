@@ -509,6 +509,15 @@ def start_scheduler():
     print("   • Tomorrow's reminder at 7:30 PM")
     if TEST_MODE:
         print("   🧪 RUNNING IN TEST MODE - WhatsApp messages will be mocked")
+    
+    # Reload all scheduled reminders from database
+    print("\n🔄 Reloading scheduled reminders from database...")
+    from tools.reminder import reload_reminders
+    reload_result = reload_reminders()
+    if "error" not in reload_result:
+        print(f"✅ Reminder reload complete: {reload_result['reloaded']} reloaded, {reload_result['skipped']} skipped")
+    else:
+        print(f"❌ Reminder reload failed: {reload_result['error']}")
 
 def trigger_today_reminder_manually():
     """Manually trigger today's reminder for testing"""
