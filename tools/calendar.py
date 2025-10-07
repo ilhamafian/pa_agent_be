@@ -143,6 +143,32 @@ def create_event(time: str = None, end_time: str = None, date: str = None, title
             'created_at': datetime.now(tz),
             'updated_at': datetime.now(tz)
         }
+    elif time:
+         # When end time is not given
+        start_datetime = datetime.strptime(f"{date}T{time}:00", "%Y-%m-%dT%H:%M:%S")
+        end_datetime = start_datetime + timedelta(hours=1)
+        # Make timezone aware
+        start_datetime = tz.localize(start_datetime)
+        end_datetime = tz.localize(end_datetime)
+        
+        event = {
+            'user_id': user_id,
+            'summary': title,
+            'description': description or "",
+            'start': {
+                'dateTime': start_datetime.isoformat(),
+                'timeZone': 'Asia/Kuala_Lumpur',
+            },
+            'end': {
+                'dateTime': end_datetime.isoformat(),
+                'timeZone': 'Asia/Kuala_Lumpur',
+            },
+            'start_time': start_datetime,  # For efficient querying
+            'end_time': end_datetime,
+            'is_all_day': False,
+            'created_at': datetime.now(tz),
+            'updated_at': datetime.now(tz)
+        }
     else:
         # All-day event
         event_date = datetime.strptime(date, "%Y-%m-%d")

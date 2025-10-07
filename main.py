@@ -10,14 +10,14 @@ from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from concurrent.futures import ThreadPoolExecutor
 from google_auth_oauthlib.flow import Flow
-from user import router as user_router
-from settings import router as settings_router
-from integrations import router as integrations_router
-from dashboard import router as dashboard_router
+from routers.user import router as user_router
+from routers.settings import router as settings_router
+from routers.integrations import router as integrations_router
+from routers.dashboard import router as dashboard_router
 
 # Internal Imports
 from tools.scheduler import start_scheduler
-from llm import assistant_response
+from routers.llm import assistant_response
 from db.mongo import oauth_states_collection, oauth_tokens_collection
 from utils.utils import hash_data, send_whatsapp_message, update_whatsapp_token_manual
 
