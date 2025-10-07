@@ -152,7 +152,6 @@ async def assistant_response(sender: str, text: str):
                             time_display = f"Time: {args['time']} - {args['end_time']}\n"
                         elif args.get("time"):
                             # Calculate end time (1 hour after start)
-                            from datetime import datetime, timedelta
                             start = datetime.strptime(args['time'], "%H:%M")
                             end = start + timedelta(hours=1)
                             time_display = f"Time: {args['time']} - {end.strftime('%H:%M')} (1 hour)\n"
