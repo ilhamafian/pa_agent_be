@@ -15,6 +15,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from db.mongo import oauth_states_collection, oauth_tokens_collection
 from cryptography.fernet import Fernet
+import dateparser
 
 load_dotenv()  # Make sure environment variables are loaded
 
@@ -28,16 +29,6 @@ APP_URL = os.getenv("APP_URL")
 SECRET_KEY = os.getenv("TOKEN_SECRET_KEY")
 ALGORITHM = "HS256"
 fernet = Fernet(os.getenv("PHONE_ENCRYPTION_KEY"))
-
-# Log critical WhatsApp configuration
-print(f"[INIT] PHONE_NUMBER_ID loaded: {PHONE_NUMBER_ID}")
-print(f"[INIT] PHONE_NUMBER_ID type: {type(PHONE_NUMBER_ID)}")
-print(f"[INIT] PHONE_NUMBER_ID is None: {PHONE_NUMBER_ID is None}")
-print(f"[INIT] PHONE_NUMBER_ID is empty string: {PHONE_NUMBER_ID == ''}")
-print(f"[INIT] APP_URL: {APP_URL}")
-print(f"[INIT] Using WHATSAPP_TOKEN from environment")
-print(f"[INIT] WHATSAPP_TOKEN loaded: {'SET' if WHATSAPP_TOKEN else 'NOT SET'}")
-print(f"{'='*80}\n")
 
 security = HTTPBearer()
 
@@ -59,26 +50,13 @@ def decrypt_phone(encrypted_number: str) -> str:
  
 
 async def send_whatsapp_message(recipient_id: str, message: str):
-    print(f"\n{'='*80}")
-    print(f"[WHATSAPP SEND] Starting send_whatsapp_message")
-    print(f"[WHATSAPP SEND] Recipient ID: {recipient_id}")
-    print(f"[WHATSAPP SEND] Message: {message}")
-    
-    print(f"[WHATSAPP SEND] Using PHONE_NUMBER_ID: {PHONE_NUMBER_ID}")
-    print(f"[WHATSAPP SEND] PHONE_NUMBER_ID type: {type(PHONE_NUMBER_ID)}")
-    print(f"[WHATSAPP SEND] PHONE_NUMBER_ID is None: {PHONE_NUMBER_ID is None}")
     
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
-    print(f"[WHATSAPP SEND] Constructed URL: {url}")
     
     current_token = WHATSAPP_TOKEN
-    print(f"[WHATSAPP SEND] Token from env: {'SET' if current_token else 'NOT SET'}")
-    print(f"[WHATSAPP SEND] Token length: {len(current_token) if current_token else 0}")
     
     if not current_token:
         error_msg = "Missing WHATSAPP_TOKEN in environment"
-        print(f"[WHATSAPP SEND] ❌ {error_msg}")
-        print(f"{'='*80}\n")
         return {"status": "error", "error": error_msg, "error_type": "missing_token_env"}
     
     headers = {
@@ -92,41 +70,20 @@ async def send_whatsapp_message(recipient_id: str, message: str):
         "text": {"body": message}
     }
     
-    print(f"[WHATSAPP SEND] Request headers: {{'Authorization': 'Bearer ***', 'Content-Type': '{headers['Content-Type']}'}}")
-    print(f"[WHATSAPP SEND] Request data: {json.dumps(data, indent=2)}")
-    
-    print(f"[WHATSAPP SEND] About to send POST request...")
-    print(f"{'='*80}\n")
-    
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, json=data, headers=headers)
             
             response_text = response.text
-            print(f"\n{'='*80}")
-            print(f"[WHATSAPP RESPONSE] Status Code: {response.status_code}")
-            print(f"[WHATSAPP RESPONSE] Response length: {len(response_text)} characters")
-            print(f"[WHATSAPP RESPONSE] Content-Type: {response.headers.get('content-type', 'Not specified')}")
             
             response_json = None
             try:
                 response_json = response.json()
-                print(f"[WHATSAPP RESPONSE] JSON parsed successfully")
-                print(f"[WHATSAPP RESPONSE] Full JSON: {json.dumps(response_json, indent=2)}")
                 
-                # Only print the essential parts to avoid log truncation
-                if response_json.get("messages"):
-                    message_id = response_json["messages"][0].get("id")
-                    print(f"[WHATSAPP RESPONSE] Message ID: {message_id}")
-                elif response_json.get("error"):
-                    print(f"[WHATSAPP RESPONSE] Error in response: {response_json['error']}")
             except Exception as json_error:
-                print(f"[WHATSAPP RESPONSE] Failed to parse response as JSON: {json_error}")
-                print(f"[WHATSAPP RESPONSE] Raw response text: {response_text}")
                 response_json = None
             
             if response.status_code == 401:
-                print(f"[WHATSAPP ERROR] 401 Unauthorized")
                 return {"status": "error", "status_code": 401, "response_text": response_text[:500], "response_json": response_json}
             
             # Return a result object for the scheduler
@@ -137,24 +94,11 @@ async def send_whatsapp_message(recipient_id: str, message: str):
                     "response_json": response_json,
                     "message_id": response_json.get("messages", [{}])[0].get("id") if response_json else None
                 }
-                print(f"\n{'='*80}")
-                print(f"[WHATSAPP SUCCESS] Message sent successfully!")
-                print(f"[WHATSAPP SUCCESS] Returning result: {json.dumps(result, indent=2)}")
-                print(f"{'='*80}\n")
                 return result
             else:
-                print(f"[WHATSAPP ERROR] Failed to send message")
-                print(f"[WHATSAPP ERROR] Status Code: {response.status_code}")
                 result = {"status": "error", "status_code": response.status_code, "response_text": response_text[:500], "response_json": response_json}
-                print(f"{json.dumps(result, indent=2)}")
-                print(f"{'='*80}\n")
                 return result
     except Exception as e:
-        print(f"\n{'='*80}")
-        print(f"[WHATSAPP EXCEPTION] Caught exception in send_whatsapp_message")
-        print(f"[WHATSAPP EXCEPTION] Exception type: {type(e).__name__}")
-        print(f"[WHATSAPP EXCEPTION] Exception message: {str(e)}")
-        print(f"{'='*80}\n")
         return {"status": "error", "error": str(e)}
 
 def get_auth_url(user_id):
@@ -232,86 +176,142 @@ def get_dashboard_events(user_id: str):
     Get events for the current day (starting at 00:00am) through the next 3 days.
     Returns events in JSON format with title, date (DD-MM-YYYY), and time.
     """
-    # Check if user has valid OAuth token
-    token_data = oauth_tokens_collection.find_one({"user_id": user_id})
-    if not token_data:
-        return {"events": [], "error": "AUTH_REQUIRED"}
+    # ============ GOOGLE CALENDAR CODE - COMMENTED OUT ============
+    # # Check if user has valid OAuth token
+    # token_data = oauth_tokens_collection.find_one({"user_id": user_id})
+    # if not token_data:
+    #     return {"events": [], "error": "AUTH_REQUIRED"}
+    # 
+    # try:
+    #     # Initialize Google Calendar service
+    #     creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
+    #     service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    #     
+    #     # Set timezone to Asia/Kuala_Lumpur
+    #     tz = pytz.timezone("Asia/Kuala_Lumpur")
+    #     now = datetime.now(tz)
+    #     
+    #     # Set start time to beginning of current day (00:00am)
+    #     start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    #     
+    #     # Set end time to end of the day 3 days from now (23:59:59)
+    #     end_time = start_time + timedelta(days=4) - timedelta(seconds=1)
+    #     
+    #     # Fetch events from Google Calendar
+    #     events_result = service.events().list(
+    #         calendarId='primary',
+    #         timeMin=start_time.isoformat(),
+    #         timeMax=end_time.isoformat(),
+    #         singleEvents=True,
+    #         orderBy='startTime'
+    #     ).execute()
+    #     
+    #     events = events_result.get("items", [])
+    #     
+    #     # Format events for dashboard
+    #     formatted_events = []
+    #     for event in events:
+    #         title = event.get("summary", "No Title")
+    #         
+    #         # Get start date/time information
+    #         start_dt_str = event["start"].get("dateTime")
+    #         end_dt_str = event["end"].get("dateTime")
+    #         start_date_str = event["start"].get("date")
+    #         end_date_str = event["end"].get("date")
+    #         
+    #         # Determine if it's an all-day event
+    #         is_all_day = start_date_str is not None
+    #         
+    #         if is_all_day:
+    #             # All-day event
+    #             event_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+    #             formatted_date = event_date.strftime("%d-%m-%Y")
+    #             formatted_time = "All-day"
+    #         else:
+    #             # Timed event
+    #             try:
+    #                 start_dt = datetime.fromisoformat(start_dt_str)
+    #                 end_dt = datetime.fromisoformat(end_dt_str)
+    #                 
+    #                 # Format date as DD-MM-YYYY
+    #                 formatted_date = start_dt.strftime("%d-%m-%Y")
+    #                 
+    #                 # Format time as HH:MM - HH:MM
+    #                 formatted_time = f"{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}"
+    #             except Exception:
+    #                 # Fallback if datetime parsing fails
+    #                 formatted_date = "Unknown"
+    #                 formatted_time = "All-day"
+    #         
+    #         formatted_events.append({
+    #             "title": title,
+    #             "date": formatted_date,
+    #             "time": formatted_time
+    #         })
+    #     
+    #     return {"events": formatted_events}
+    #     
+    # except Exception as e:
+    #     print(f"Error fetching dashboard events: {e}")
+    #     return {"events": [], "error": str(e)}
+    # ============ END GOOGLE CALENDAR CODE ============
     
+    # ============ MONGODB IMPLEMENTATION ============
+    from db.mongo import db
+    calendar_collection = db["calendar"]
+
     try:
-        # Initialize Google Calendar service
-        creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-        
-        # Set timezone to Asia/Kuala_Lumpur
         tz = pytz.timezone("Asia/Kuala_Lumpur")
         now = datetime.now(tz)
-        
-        # Set start time to beginning of current day (00:00am)
+
+        # Define time window (today to +6 days)
         start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        # Set end time to end of the day 3 days from now (23:59:59)
-        end_time = start_time + timedelta(days=4) - timedelta(seconds=1)
-        
-        # Fetch events from Google Calendar
-        events_result = service.events().list(
-            calendarId='primary',
-            timeMin=start_time.isoformat(),
-            timeMax=end_time.isoformat(),
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute()
-        
-        events = events_result.get("items", [])
-        
-        # Format events for dashboard
+        end_time = start_time + timedelta(days=6) - timedelta(seconds=1)
+
+        # Fetch events matching this window
+        events = list(calendar_collection.find({
+            "user_id": user_id,
+            "$or": [
+                {"start.dateTime": {"$gte": start_time.isoformat(), "$lte": end_time.isoformat()}},
+                {"start.date": {"$gte": start_time.date().isoformat(), "$lte": end_time.date().isoformat()}}
+            ]
+        }).sort("start.dateTime", 1))
+
         formatted_events = []
+
         for event in events:
             title = event.get("summary", "No Title")
-            
-            # Get start date/time information
-            start_dt_str = event["start"].get("dateTime")
-            end_dt_str = event["end"].get("dateTime")
-            start_date_str = event["start"].get("date")
-            end_date_str = event["end"].get("date")
-            
-            # Determine if it's an all-day event
-            is_all_day = start_date_str is not None
-            
-            if is_all_day:
+            start = event.get("start", {})
+            end = event.get("end", {})
+
+            start_dt_str = start.get("dateTime")
+            end_dt_str = end.get("dateTime")
+            start_date_str = start.get("date")
+            end_date_str = end.get("date")
+
+            if start_date_str:
                 # All-day event
                 event_date = datetime.strptime(start_date_str, "%Y-%m-%d")
                 formatted_date = event_date.strftime("%d-%m-%Y")
                 formatted_time = "All-day"
+            elif start_dt_str:
+                # Timed event (parse with dateparser)
+                start_dt = dateparser.parse(start_dt_str).astimezone(tz)
+                end_dt = dateparser.parse(end_dt_str).astimezone(tz)
+                formatted_date = start_dt.strftime("%d-%m-%Y")
+                formatted_time = f"{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}"
             else:
-                # Timed event
-                try:
-                    start_dt = datetime.fromisoformat(start_dt_str)
-                    end_dt = datetime.fromisoformat(end_dt_str)
-                    
-                    # Format date as DD-MM-YYYY
-                    formatted_date = start_dt.strftime("%d-%m-%Y")
-                    
-                    # Format time as HH:MM - HH:MM
-                    formatted_time = f"{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}"
-                except Exception:
-                    # Fallback if datetime parsing fails
-                    formatted_date = "Unknown"
-                    formatted_time = "All-day"
-            
+                formatted_date = "Unknown"
+                formatted_time = "All-day"
+
             formatted_events.append({
                 "title": title,
                 "date": formatted_date,
                 "time": formatted_time
             })
-        
+
         return {"events": formatted_events}
-        
+
     except Exception as e:
         print(f"Error fetching dashboard events: {e}")
         return {"events": [], "error": str(e)}
-
-def update_whatsapp_token_manual(new_token: str) -> dict:
-    print(f"\n{'='*80}")
-    print(f"[UPDATE TOKEN] This function is deprecated. Using WHATSAPP_TOKEN from environment.")
-    print(f"{'='*80}\n")
-    return {"status": "noop", "message": "Using WHATSAPP_TOKEN from environment"}
