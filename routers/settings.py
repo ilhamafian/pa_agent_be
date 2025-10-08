@@ -16,7 +16,6 @@ router = APIRouter()
 # MongoDB setup
 db = client["oauth_db"]
 users_collection = db["users"]
-settings_collection = db["settings"]
 
 class UserIdPayload(BaseModel):
     user_id: str
@@ -50,18 +49,11 @@ async def settings(user_id: str = Query(...)):
     # Convert ObjectId to string
     user["_id"] = str(user["_id"])
 
-    settings = settings_collection.find_one({"user_id": user_id})
-    if not settings:
-        raise HTTPException(status_code=404, detail="Settings not found")
-    
-    print(settings)
-
     user_settings = {
         "user_id": user["_id"],
         "name": user["nickname"],
         "email": user["email"],
         "language": user["language"],
-        "daily_briefing": settings["settings"]["daily_briefing"], 
     }
     
     return user_settings
@@ -101,12 +93,6 @@ async def update_notifications(data: UpdateNotificationsPayload):
         ObjectId(user_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ObjectId format")
-
-    # Update only the daily_briefing section
-    result = settings_collection.update_one(
-        {"user_id": user_id},
-        {"$set": {"settings.daily_briefing": data.daily_briefing.dict()}}
-    )
 
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Settings not found")
