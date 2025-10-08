@@ -101,6 +101,10 @@ async def assistant_response(sender: str, text: str):
                 await send_whatsapp_message(phone_number, "❌ Temporary issue. Please try again in a moment.")
                 return {"ok": False, "error": "User not found after retry"}
         
+        # Extract user metadata after confirming user exists
+        about_yourself = user["metadata"]["about_yourself"]
+        profession = user["metadata"]["profession"]
+        
         user_id = str(user["_id"])
         user_input = text
 
@@ -110,7 +114,7 @@ async def assistant_response(sender: str, text: str):
         now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
         today_str = now.strftime("%Y-%m-%d")
         tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
-        system_prompt = system_prompt_template.format(today=today_str, tomorrow=tomorrow_str)
+        system_prompt = system_prompt_template.format(today=today_str, tomorrow=tomorrow_str, about_yourself=about_yourself, profession=profession)
 
         # Get conversation history from MongoDB (with fallback to in-memory)
         history = get_conversation_history(user_id, user_memory)
