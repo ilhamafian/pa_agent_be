@@ -63,6 +63,12 @@ def _check_phone_number_exists(hashed_phone: str) -> bool:
     user = users_collection.find_one({"hashed_phone_number": hashed_phone})
     return bool(user)
 
+async def send_onboarding_guide(phone_number: int):
+    onboarding_url = f"{FRONTEND_URL}/guide"
+    formatted_message = onboarding_guide_prompt.format(onboarding_url=onboarding_url)
+    await send_whatsapp_message(phone_number, formatted_message)
+    return {"message": "Onboarding guide sent successfully"}
+
 @router.post("/user_onboarding")
 async def create_user(data: UserPayload):
     print(f"Received user: {data}")
@@ -104,6 +110,7 @@ async def create_user(data: UserPayload):
         user_id_str = str(result.inserted_id)
 
         token = create_access_token(data={"user_id": user_id_str})
+        await send_onboarding_guide(data.phone_number)
         return {
             "token": token,
             "message": "User created successfully",
