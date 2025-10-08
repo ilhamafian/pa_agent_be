@@ -17,7 +17,7 @@ from routers.dashboard import router as dashboard_router
 
 # Internal Imports
 from tools.scheduler import start_scheduler
-from routers.llm import assistant_response
+from ai.workflows.assistant import assistant_response
 from db.mongo import oauth_states_collection, oauth_tokens_collection
 from utils.utils import hash_data, send_whatsapp_message
 
@@ -109,14 +109,13 @@ async def receive_whatsapp(request: Request):
                 "- 📝 Save personal notes and search them later with smart suggestions\n\n"
                 "- 🧾 Detect and auto-schedule bookings from templates (great for freelancers and service providers)\n\n"
                 f"To activate your account and unlock these features, tap below:\n👉 {onboarding_url}\n\n"
-                "Once you're in, just message me here anytime. I’ve got your back! 💪"
             )
 
             await send_whatsapp_message(sender, onboarding_message)
 
             # Stop further processing
             return {"ok": True}
-
+        
         # ✅ Step 4: Proceed to assistant only if user exists
         return await assistant_response(sender, text)
 

@@ -9,12 +9,16 @@ from datetime import datetime, timedelta
 from jose import jwt
 import pytz
 from db.mongo import client
-from utils.utils import hash_data, encrypt_phone
+from utils.utils import hash_data, encrypt_phone, send_whatsapp_message
 
 load_dotenv()
 SECRET_KEY = os.getenv("TOKEN_SECRET_KEY")
+FRONTEND_URL = os.getenv("FRONTEND_URL")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 day
+
+with open("ai/prompts/onboarding_guide.txt", "r", encoding="utf-8") as f:
+    onboarding_guide_prompt = f.read()
 
 router = APIRouter()
 
@@ -55,12 +59,16 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def _check_phone_number_exists(phone_number: int) -> bool:
-    """Utility function to check if a phone number exists in the database"""
-    hashed_phone = hash_data(str(phone_number))
+def _check_phone_number_exists(hashed_phone: str) -> bool:
+    """Utility function to check if a hashed phone number exists in the database"""
     user = users_collection.find_one({"hashed_phone_number": hashed_phone})
     return bool(user)
 
+async def send_onboarding_guide(phone_number: int):
+    onboarding_url = f"{FRONTEND_URL}/guide"
+    formatted_message = onboarding_guide_prompt.format(onboarding_url=onboarding_url)
+    await send_whatsapp_message(phone_number, formatted_message)
+    return {"message": "Onboarding guide sent successfully"}
 
 @router.post("/user_onboarding")
 async def create_user(data: UserPayload):
@@ -94,6 +102,7 @@ async def create_user(data: UserPayload):
                 "q3": data.metadata.q3,
                 "q4": data.metadata.q4
             },
+            "user_persona": False,
             "created_at": now,
             "updated_at": now
         }
@@ -102,29 +111,8 @@ async def create_user(data: UserPayload):
         result = users_collection.insert_one(user_doc)
         user_id_str = str(result.inserted_id)
 
-        # Prepare and insert integrations and settings using inserted user_id
-        integrations_doc = {
-            "user_id": user_id_str,
-            "integrations": {
-                "google_calendar": {
-                    "enabled": False
-                }
-            }
-        }
-        settings_doc = {
-            "user_id": user_id_str,
-            "settings": {
-                "daily_briefing": {
-                    "enabled": True,
-                    "time": 1930
-                }
-            }
-        }
-
-        integrations_collection.insert_one(integrations_doc)
-        settings_collection.insert_one(settings_doc)
-
         print(f"User created with ID: {user_id_str}")
+        await send_onboarding_guide(data.phone_number)
 
         token = create_access_token(data={"user_id": user_id_str})
         return {

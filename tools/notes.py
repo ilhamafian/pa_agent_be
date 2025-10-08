@@ -32,23 +32,17 @@ def create_note(user_id: str = None, content: str = None, title: str = None) -> 
     # Auto-generate title if not provided
     if not title:
         try:
-            # Use OpenAI to generate a meaningful title
-            title_response = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": "Generate a concise, descriptive title (max 50 characters) for the following note content. The title should capture the main topic or essence of the note."
-                    },
-                    {
-                        "role": "user", 
-                        "content": content
-                    }
+            # Use OpenAI Responses API to generate a meaningful title
+            title_response = openai_client.responses.create(
+                model="gpt-4o-mini",
+                input=[
+                    {"role": "system", "content": "Generate a concise, descriptive title (max 50 characters) for the following note content. The title should capture the main topic or essence of the note."},
+                    {"role": "user", "content": content}
                 ],
-                max_tokens=20,
-                temperature=0.3
+                temperature=0.3,
+                max_output_tokens=20
             )
-            title = title_response.choices[0].message.content.strip()
+            title = (getattr(title_response, "output_text", "") or "").strip()
             
             # Ensure title doesn't exceed 50 characters
             if len(title) > 50:

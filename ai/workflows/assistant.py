@@ -75,7 +75,7 @@ tools = [
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
 # Load the system prompt template once at module level
-with open("system_prompt.txt", "r", encoding="utf-8") as f:
+with open("ai/prompts/system_prompt.txt", "r", encoding="utf-8") as f:
     system_prompt_template = f.read()
 
 async def assistant_response(sender: str, text: str):
@@ -123,19 +123,26 @@ async def assistant_response(sender: str, text: str):
         # Prepare chat messages with system prompt + recent history (last 10 messages)
         chat_messages = [{"role": "system", "content": system_prompt}] + history[-10:]
 
-        response = client.chat.completions.create(
+        response = client.responses.create(
             model="gpt-4o",
-            messages=chat_messages,
+            input=chat_messages,
             tools=tools,
             tool_choice="auto"
         )
 
-        ai_message = response.choices[0].message
+        # Extract function tool calls from Responses API output
+        tool_calls = []
+        try:
+            for item in getattr(response, "output", []):
+                if getattr(item, "type", None) == "function_call":
+                    tool_calls.append(item)
+        except Exception:
+            tool_calls = []
 
-        if ai_message.tool_calls:
-            for tool_call in ai_message.tool_calls:
-                function_name = tool_call.function.name
-                args = json.loads(tool_call.function.arguments)
+        if tool_calls:
+            for tool_call in tool_calls:
+                function_name = tool_call.name
+                args = json.loads(tool_call.arguments)
 
                 try:
                     if function_name == "create_event":
@@ -399,8 +406,10 @@ async def assistant_response(sender: str, text: str):
                 
                 return {"ok": True}
 
-        if ai_message.content:
-            reply = ai_message.content.strip()
+        # If no tool calls, send the assistant's text output
+        output_text = getattr(response, "output_text", "") or ""
+        if output_text:
+            reply = output_text.strip()
             safe_reply = clean_unicode(reply)
             await send_whatsapp_message(phone_number, safe_reply)
             
