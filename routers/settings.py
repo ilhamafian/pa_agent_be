@@ -54,6 +54,7 @@ async def settings(user_id: str = Query(...)):
         "name": user["nickname"],
         "email": user["email"],
         "language": user["language"],
+        "about_yourself": user["metadata"]["about_yourself"],
     }
     
     return user_settings
