@@ -72,6 +72,25 @@ tools = [
     retrieve_note_tool,
 ]
 
+def _flatten_response_tools(tools_list):
+    """Flatten legacy tool schema {"type":"function","function":{...}}
+    into Responses API schema {"type":"function","name":..., "parameters":...}.
+    Safe to call on already-flat tools.
+    """
+    flattened = []
+    for t in tools_list:
+        if isinstance(t, dict) and t.get("type") == "function" and "function" in t:
+            f = t.get("function") or {}
+            flattened.append({
+                "type": "function",
+                "name": f.get("name"),
+                "description": f.get("description", ""),
+                "parameters": f.get("parameters", {"type": "object", "properties": {}})
+            })
+        else:
+            flattened.append(t)
+    return flattened
+
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
 # Load the system prompt template once at module level
@@ -130,7 +149,7 @@ async def assistant_response(sender: str, text: str):
         response = client.responses.create(
             model="gpt-4o",
             input=chat_messages,
-            tools=tools,
+            tools=_flatten_response_tools(tools),
             tool_choice="auto"
         )
 
