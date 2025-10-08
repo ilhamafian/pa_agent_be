@@ -4,7 +4,7 @@ from bson import ObjectId
 from db.mongo import client
 from utils.utils import get_auth_url, get_current_user
 
-load_dotenv()
+load_dotenv(dotenv_path=".env.local", override=True)
 
 router = APIRouter()
 

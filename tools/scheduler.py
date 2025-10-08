@@ -15,7 +15,7 @@ from db.mongo import get_all_users, db  # Added db import for calendar collectio
 from utils.utils import decrypt_phone, send_whatsapp_message, get_event_loop, get_auth_url
 from tools.task import get_tasks
 
-load_dotenv()
+load_dotenv(dotenv_path=".env.local", override=True)
 
 # Test mode configuration
 TEST_MODE = os.getenv("SCHEDULER_TEST_MODE", "false").lower() == "true"

@@ -9,7 +9,7 @@ import sys
 from dotenv import load_dotenv
 
 # Load environment variables and set test mode
-load_dotenv()
+load_dotenv(dotenv_path=".env.local", override=True)
 os.environ["SCHEDULER_TEST_MODE"] = "true"
 
 # Add the project root to Python path

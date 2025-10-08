@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from db.mongo import db  # Import MongoDB connection
 from dateutil.relativedelta import relativedelta
 
-load_dotenv()  # Make sure environment variables are loaded
+load_dotenv(dotenv_path=".env.local", override=True)  # Make sure environment variables are loaded
 
 # GOOGLE CALENDAR SCOPES - COMMENTED OUT
 # SCOPES = json.loads(os.getenv("SCOPES", "[]"))

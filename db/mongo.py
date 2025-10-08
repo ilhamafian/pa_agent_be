@@ -5,7 +5,7 @@ from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
 # Load environment variables first
-load_dotenv()
+load_dotenv(dotenv_path=".env.local", override=True)
 
 MONGO_URI = os.getenv("MONGO_URI")
 MEMORY_MESSAGE_LIMIT = int(os.getenv("MEMORY_MESSAGE_LIMIT", "30"))
@@ -13,6 +13,7 @@ MEMORY_MESSAGE_LIMIT = int(os.getenv("MEMORY_MESSAGE_LIMIT", "30"))
 client = MongoClient(MONGO_URI)
 
 db = client["oauth_db"]
+users_collection = db["users"]
 oauth_states_collection = db["oauth_states"]
 oauth_tokens_collection = db["oauth_tokens"]
 conversation_history_collection = db["conversation_history"]

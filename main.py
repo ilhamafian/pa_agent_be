@@ -26,7 +26,7 @@ users_collection = db["users"]
 integrations_collection = db["integrations"]
 
 # === Setup ===
-load_dotenv()
+load_dotenv(dotenv_path=".env.local", override=True)
 
 SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")

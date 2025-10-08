@@ -11,7 +11,7 @@ import pytz
 from db.mongo import client
 from utils.utils import hash_data, encrypt_phone, send_whatsapp_message
 
-load_dotenv()
+load_dotenv(dotenv_path=".env.local", override=True)
 SECRET_KEY = os.getenv("TOKEN_SECRET_KEY")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 ALGORITHM = "HS256"
@@ -30,10 +30,9 @@ integrations_collection = db["integrations"]
 settings_collection = db["settings"]
 
 class Metadata(BaseModel):
-    q1: List[str]
-    q2: str
-    q3: str
-    q4: str
+    about_yourself: str
+    profession: str
+    source: str
 
 class UserPayload(BaseModel):
     PIN: int
@@ -64,12 +63,6 @@ def _check_phone_number_exists(hashed_phone: str) -> bool:
     user = users_collection.find_one({"hashed_phone_number": hashed_phone})
     return bool(user)
 
-async def send_onboarding_guide(phone_number: int):
-    onboarding_url = f"{FRONTEND_URL}/guide"
-    formatted_message = onboarding_guide_prompt.format(onboarding_url=onboarding_url)
-    await send_whatsapp_message(phone_number, formatted_message)
-    return {"message": "Onboarding guide sent successfully"}
-
 @router.post("/user_onboarding")
 async def create_user(data: UserPayload):
     print(f"Received user: {data}")
@@ -97,12 +90,11 @@ async def create_user(data: UserPayload):
             "email": data.email,
             "language": data.language,
             "metadata": {
-                "q1": data.metadata.q1,
-                "q2": data.metadata.q2,
-                "q3": data.metadata.q3,
-                "q4": data.metadata.q4
+                "about_yourself": data.metadata.about_yourself,
+                "profession": data.metadata.profession,
+                "source": data.metadata.source,
             },
-            "user_persona": False,
+            "onboarding_completed": False,
             "created_at": now,
             "updated_at": now
         }
@@ -110,9 +102,6 @@ async def create_user(data: UserPayload):
         # Insert user into MongoDB
         result = users_collection.insert_one(user_doc)
         user_id_str = str(result.inserted_id)
-
-        print(f"User created with ID: {user_id_str}")
-        await send_onboarding_guide(data.phone_number)
 
         token = create_access_token(data={"user_id": user_id_str})
         return {

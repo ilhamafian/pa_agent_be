@@ -9,7 +9,7 @@ from bson import ObjectId
 from db.mongo import client
 from utils.utils import hash_data
 
-load_dotenv()
+load_dotenv(dotenv_path=".env.local", override=True)
 
 router = APIRouter()
 

@@ -13,7 +13,7 @@ from bson import ObjectId
 from db.mongo import client
 
 # Load environment variables first
-load_dotenv()
+load_dotenv(dotenv_path=".env.local", override=True)
 
 db = client["oauth_db"]  # Using same database as existing oauth collections
 reminders_collection = db["reminders"]

@@ -7,7 +7,7 @@ from openai import OpenAI
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=".env.local", override=True)
 
 # Notes collection setup
 db = client["oauth_db"]

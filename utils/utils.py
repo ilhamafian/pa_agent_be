@@ -17,7 +17,7 @@ from db.mongo import oauth_states_collection, oauth_tokens_collection
 from cryptography.fernet import Fernet
 import dateparser
 
-load_dotenv()  # Make sure environment variables are loaded
+load_dotenv(dotenv_path=".env.local", override=True)  # Make sure environment variables are loaded
 
 # Load environment variables with logging
 print(f"\n{'='*80}")
