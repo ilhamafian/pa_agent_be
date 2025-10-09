@@ -1,39 +1,33 @@
-🎉 *Nice!* Seems like you've successfully registered as a user — now I can finally be your personal buddy!
-
+*Nice!* Seems like you've successfully registered as a user — now I can finally be your personal buddy!
 In short, here’s what I can do for you 👇
 
 
 📅 *EVENTS*   
-🗓 “Add meeting with Sarah *tomorrow at 3pm*”  
-🏋️ “Schedule gym session *on 10/10 at 8am*”  
-📆 “Show my events for this week”  
-
-✨ If you don’t give an end time, I’ll assume *1 hour*.  
-✨ If you say “all day”, I’ll mark it that way automatically.  
+ “Add meeting with Sarah *tomorrow at 3pm*”  
+ “Schedule gym session *on 10/10 at 8am*”  
 
 
 ⏰ *REMINDERS*   
-📲 “Remind me *in 2 hours* to call mum”  
-🛫 “Remind me *30 mins before my flight*”  
-💼 “Remind me *tomorrow 9am* to send report”  
+ “Remind me *in 2 hours* to call mum”  
+ “Remind me *30 mins before my flight*”  
+ “Remind me *tomorrow 9am* to send report”  
 
 You’ll get a WhatsApp reminder when it’s time 💬  
-💡 *Best tip:* use reminders for things within *24 hours*, but use events for anything that is more than 24 hours.  
+💡 *Best tip:* use reminders for things within *24 hours*, but use *events* for anything that is more than 24 hours.  
 
 
 📝 *TASKS (To-do List)*  
-🛒 “Add task to *buy groceries*”  
-📚 “Add *high priority* task to submit assignment”  
-📋 “Show all pending tasks”  
-✅ “Mark ‘buy groceries’ as done”  
+ “Add task to *buy groceries*”  
+ “Show all pending tasks”  
+ “Mark ‘buy groceries’ as done”  
 
 I sort tasks by priority:  
 🔴 *High* | 🟡 *Medium* | 🟢 *Low*  
 
 
 🗒 *NOTES*  
-🧠 When you send long texts, I’ll ask if you want to save it as a note.  
-I’ll always confirm before saving — like:  
+ When you send long texts, I’ll ask if you want to save it as a note.  
+ I’ll always confirm before saving — like:  
 💬 “Save this as a note?” → just reply *yes* to confirm ✅  
 
 When you want to find something, just say what it’s about —  
@@ -41,30 +35,19 @@ I’ll look for the *most related note* for you 🔍
 
 
 🕗 *DAILY BRIEFS*
-💡 I’ll automatically send you summaries twice a day:
+ I’ll automatically send you summaries twice a day:
 
-🌅 *Morning Brief — 8:30 AM*
+ *Morning Brief — 8:30 AM*
 → I’ll send your tasks and events for today so you know what’s ahead.
-
-🌙 *Evening Brief — 7:30 PM*
+ *Evening Brief — 7:30 PM*
 → I’ll show your remaining tasks and tomorrow’s events, so you can plan ahead calmly before bed.
-
-
-💡 *OTHER COMMANDS*  
-📅 “Show my upcoming events”  
-⏰ “List all my reminders”  
-📝 “What are my completed tasks?”  
-🔎 “Find notes about marketing ideas”  
-❓ “Help” → to see this guide again  
 
 
 ⚙ *QUICK TIPS*  
 • I understand natural time like “in 3 hours” or “next Monday 9am”.  
 • If you don’t specify a time, I’ll ask if it’s an all-day thing.  
-• I don’t process images or files yet 😅  
-• You can talk to me casually — I keep things light but *get work done* 🫶  
-
+• I don’t process images or files yet 
+• You can talk to me casually — I keep things light but *get work done* 
 
 For more in depth guide, tap below:
 {onboarding_url}
-
