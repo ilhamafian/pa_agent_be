@@ -2,7 +2,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from db.mongo import get_all_users
+from db.mongo import get_all_users as get_all_users_mongo
 from utils.utils import send_whatsapp_message, decrypt_phone
 
 load_dotenv(dotenv_path=".env.local", override=True)
@@ -16,7 +16,7 @@ class AnnouncementPayload(BaseModel):
 async def announcement(data: AnnouncementPayload):
     print(f"Received announcement: {data.announcement}")
     try:
-        users = get_all_users()
+        users = get_all_users_mongo()
         
         tasks = []
         for user in users:
@@ -34,7 +34,7 @@ async def announcement(data: AnnouncementPayload):
 @router.get("/total_users")
 async def get_total_users():
     try:
-        users = get_all_users()
+        users = get_all_users_mongo()
         return {"total": len(users)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch users: {e}")
