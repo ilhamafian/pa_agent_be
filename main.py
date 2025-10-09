@@ -14,7 +14,7 @@ from routers.user import router as user_router
 from routers.settings import router as settings_router
 from routers.integrations import router as integrations_router
 from routers.dashboard import router as dashboard_router
-
+from routers.admin import router as admin_router
 # Internal Imports
 from tools.scheduler import start_scheduler
 from ai.workflows.assistant import assistant_response
