@@ -16,7 +16,11 @@ class AnnouncementPayload(BaseModel):
 async def announcement(data: AnnouncementPayload):
     print(f"Received announcement: {data.announcement}")
     try:
-        users = get_all_users_mongo()
+        # Run the synchronous MongoDB call in a thread pool to avoid blocking
+        users = await asyncio.to_thread(get_all_users_mongo)
+        
+        if not users:
+            return {"message": "No users found to send announcement to"}
         
         tasks = []
         for user in users:
@@ -24,9 +28,18 @@ async def announcement(data: AnnouncementPayload):
             tasks.append(send_whatsapp_message(decrypted_phone, data.announcement))
         
         # Run all WhatsApp sends concurrently
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Count successes and failures
+        successes = sum(1 for r in results if isinstance(r, dict) and r.get("status") == "success")
+        failures = len(results) - successes
 
-        return {"message": f"Announcement sent to {len(users)} users successfully"}
+        return {
+            "message": f"Announcement sent to {successes}/{len(users)} users successfully",
+            "total_users": len(users),
+            "successful": successes,
+            "failed": failures
+        }
     except Exception as e:
         print(f"Error sending announcement: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -34,7 +47,8 @@ async def announcement(data: AnnouncementPayload):
 @router.get("/total_users")
 async def get_total_users():
     try:
-        users = get_all_users_mongo()
+        # Run the synchronous MongoDB call in a thread pool to avoid blocking
+        users = await asyncio.to_thread(get_all_users_mongo)
         return {"total": len(users)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch users: {e}")
