@@ -200,11 +200,35 @@ async def auth_callback(request: Request):
     )
 
 # Register your user API routes
+print("\n" + "="*80)
+print("[MAIN] Registering routers...")
+print("="*80)
+
+print("[MAIN] Registering admin_router...")
 app.include_router(admin_router)
+print("[MAIN] ✅ Admin router registered")
+
+print("[MAIN] Registering user_router...")
 app.include_router(user_router)
+print("[MAIN] ✅ User router registered")
+
+print("[MAIN] Registering settings_router...")
 app.include_router(settings_router)
+print("[MAIN] ✅ Settings router registered")
+
+print("[MAIN] Registering integrations_router...")
 app.include_router(integrations_router)
+print("[MAIN] ✅ Integrations router registered")
+
+print("[MAIN] Registering dashboard_router...")
 app.include_router(dashboard_router)
+print("[MAIN] ✅ Dashboard router registered")
+
+print("\n[MAIN] All registered routes:")
+for route in app.routes:
+    if hasattr(route, 'methods') and hasattr(route, 'path'):
+        print(f"  - {list(route.methods)} {route.path}")
+print("="*80 + "\n")
 
 # === Start Scheduler ===
 start_scheduler()

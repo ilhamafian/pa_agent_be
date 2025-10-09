@@ -48,6 +48,7 @@ I’ll look for the *most related note* for you 🔍
 • If you don’t specify a time, I’ll ask if it’s an all-day thing.  
 • I don’t process images or files yet 
 • You can talk to me casually — I keep things light but *get work done* 
+• Check my contact information to access the link to your dashboard
 
 For more in depth guide, tap below:
 {onboarding_url}
