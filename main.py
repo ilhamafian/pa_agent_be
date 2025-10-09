@@ -200,6 +200,7 @@ async def auth_callback(request: Request):
     )
 
 # Register your user API routes
+app.include_router(admin_router)
 app.include_router(user_router)
 app.include_router(settings_router)
 app.include_router(integrations_router)
