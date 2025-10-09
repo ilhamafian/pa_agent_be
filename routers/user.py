@@ -1,5 +1,7 @@
 # app/user.py
+import random
 import hashlib
+from bson import ObjectId
 import os
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
@@ -50,6 +52,14 @@ class LogoutPayload(BaseModel):
     phone_number: str
 
 class WaitlistPayload(BaseModel):
+    phone_number: str
+
+class ChangePinRequest(BaseModel):
+    user_id: str
+    current_pin: int
+    new_pin: int
+
+class ForgotPinRequest(BaseModel):
     phone_number: str
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
@@ -233,3 +243,28 @@ async def waitlist(req: WaitlistPayload):
     except Exception as e:
         print(f"Error during waitlist: {e}")
         raise HTTPException(status_code=500, detail="❌ Failed to add to waitlist")
+    
+@router.post("/change_pin")
+async def change_pin(data: ChangePinRequest):
+    print(f"Change PIN request for user_id: {data.user_id}")
+    user = users_collection.find_one({"_id": ObjectId(data.user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user["PIN"] != hash_data(str(data.current_pin)):
+        raise HTTPException(status_code=400, detail="Invalid old PIN")
+    users_collection.update_one({"_id": ObjectId(data.user_id)}, {"$set": {"PIN": hash_data(str(data.new_pin))}})
+    return {"message": "✅ PIN changed successfully"}
+    
+@router.post("/forgot_pin")
+async def forgot_pin(data: ForgotPinRequest):
+    print(f"Forgot PIN request for phone: {data.phone_number}")
+    hashed_phone = hash_data(data.phone_number)
+    user = users_collection.find_one({"hashed_phone_number": hashed_phone})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    pin = random.randint(100000, 999999)  # ensures always 6 digits
+    print(f"New PIN: {pin}")
+    users_collection.update_one({"hashed_phone_number": hashed_phone}, {"$set": {"PIN": hash_data(str(pin))}})
+    await send_whatsapp_message(data.phone_number, "Your New Temporary PIN is: " + str(pin) + ". Please change this PIN once you login to your account.")
+    return {"message": "✅ PIN sent to phone number"}
