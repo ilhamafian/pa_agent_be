@@ -49,6 +49,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"\n[REQUEST] {request.method} {request.url.path}")
+    print(f"[REQUEST] Headers: {dict(request.headers)}")
+    print(f"[REQUEST] Client: {request.client}")
+    
+    response = await call_next(request)
+    
+    print(f"[RESPONSE] Status: {response.status_code}")
+    return response
+
 # === Globals ===
 executor = ThreadPoolExecutor()
 redirect_uri = f"{APP_URL}/auth/google_callback"
