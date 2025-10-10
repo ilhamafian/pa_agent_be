@@ -104,7 +104,7 @@ async def send_whatsapp_template(recipient_id: str, template_name: str, language
     Send a WhatsApp template message (for users outside 24-hour window).
     Template must be pre-approved in Meta Business Manager.
     """
-    url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
+    url = f"https://graph.facebook.com/v23.0/{PHONE_NUMBER_ID}/messages"
     
     current_token = WHATSAPP_TOKEN
     
@@ -119,13 +119,12 @@ async def send_whatsapp_template(recipient_id: str, template_name: str, language
     
     data = {
         "messaging_product": "whatsapp",
-        "recipient_type": "individual",
         "to": recipient_id,
         "type": "template",
         "template": {
-            "name": template_name,  # "v1_announcement"
+            "name": template_name,
             "language": {
-                "code": language_code  # "en_US"
+                "code": language_code
             }
         }
     }
