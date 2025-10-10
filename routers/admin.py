@@ -1,7 +1,7 @@
 import asyncio
 import traceback
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from db.mongo import get_all_users as get_all_users_mongo
@@ -19,8 +19,14 @@ class AnnouncementPayload(BaseModel):
     template_name: Optional[str] = None  # Template name if use_template=True
     
 @router.post("/announcement")
-async def announcement(data: AnnouncementPayload):
+async def announcement(request: Request, data: AnnouncementPayload):
+    # Log raw request body
+    body = await request.body()
     print("\n" + "="*80)
+    print(f"[ANNOUNCEMENT] RAW REQUEST BODY: {body.decode('utf-8')}")
+    print(f"[ANNOUNCEMENT] Content-Type: {request.headers.get('content-type')}")
+    print("="*80)
+    
     print(f"[ANNOUNCEMENT] Endpoint HIT!")
     print(f"[ANNOUNCEMENT] Parsed data.announcement: {data.announcement}")
     print(f"[ANNOUNCEMENT] Parsed data.use_template: {data.use_template}")
