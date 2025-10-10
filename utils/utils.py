@@ -123,18 +123,10 @@ async def send_whatsapp_template(recipient_id: str, template_name: str, language
         "to": recipient_id,
         "type": "template",
         "template": {
-            "name": template_name,
+            "name": template_name,  # "v1_announcement"
             "language": {
-                "code": language_code
-            },
-            "components": [
-                {
-                    "type": "body",
-                    "parameters": [
-                        {"type": "text", "text": "Hello"}
-                    ]
-                }
-            ]
+                "code": language_code  # "en_US"
+            }
         }
     }
     
