@@ -1,5 +1,6 @@
 import asyncio
 import traceback
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -13,9 +14,9 @@ print("[ADMIN ROUTER] Admin router module loaded")
 router = APIRouter()
 
 class AnnouncementPayload(BaseModel):
-    announcement: str
+    announcement: str = ""  # Can be empty if using template
     use_template: bool = False  # Set to True to use WhatsApp template (for users outside 24h window)
-    template_name: str = None  # Template name if use_template=True
+    template_name: Optional[str] = None  # Template name if use_template=True
     
 @router.post("/announcement")
 async def announcement(data: AnnouncementPayload):
