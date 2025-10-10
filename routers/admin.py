@@ -67,11 +67,20 @@ async def announcement(data: AnnouncementPayload):
         failures = len(results) - successes
         
         print(f"[ANNOUNCEMENT] Final Result: {successes} successful, {failures} failed")
+        
+        # Log errors separately for debugging
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
                 print(f"[ANNOUNCEMENT] Result {idx+1}: EXCEPTION - {result}")
+            elif isinstance(result, dict) and result.get("status") == "error":
+                print(f"[ANNOUNCEMENT] Result {idx+1}: ERROR - {result}")
+                # Check for specific WhatsApp errors
+                if result.get("response_json"):
+                    error_info = result["response_json"].get("error", {})
+                    if "template" in error_info.get("message", "").lower():
+                        print(f"[ANNOUNCEMENT] ⚠️ TEMPLATE ERROR: Template '{data.template_name}' may not exist or is not approved!")
             else:
-                print(f"[ANNOUNCEMENT] Result {idx+1}: {result}")
+                print(f"[ANNOUNCEMENT] Result {idx+1}: SUCCESS")
 
         response = {
             "message": f"Announcement sent to {successes}/{len(users)} users successfully",
