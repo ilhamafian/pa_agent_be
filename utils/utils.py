@@ -99,69 +99,74 @@ async def send_whatsapp_message(recipient_id: str, message: str):
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
-async def send_whatsapp_template(recipient_id: str, template_name: str, language_code: str = "en", parameters: list = None):
+async def send_whatsapp_template(recipient_id: str, template_name: str, language_code: str = "en"):
     """
     Send a WhatsApp template message (for users outside 24-hour window).
     Template must be pre-approved in Meta Business Manager.
     """
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
+    
     current_token = WHATSAPP_TOKEN
-
+    
     if not current_token:
-        return {"status": "error", "error": "Missing WHATSAPP_TOKEN in environment", "error_type": "missing_token_env"}
-
+        error_msg = "Missing WHATSAPP_TOKEN in environment"
+        return {"status": "error", "error": error_msg, "error_type": "missing_token_env"}
+    
     headers = {
         "Authorization": f"Bearer {current_token}",
         "Content-Type": "application/json"
     }
-
-    template_data = {
-        "name": template_name,
-        "language": {"code": language_code}
-    }
-
-    # Add components if provided
-    if parameters:
-        template_data["components"] = [
-            {
-                "type": "body",
-                "parameters": [{"type": "text", "text": p} for p in parameters]
-            }
-        ]
-    else:
-        template_data["components"] = []  # Prevents (#100) error
-
+    
     data = {
         "messaging_product": "whatsapp",
         "to": recipient_id,
         "type": "template",
-        "template": template_data
+        "template": {
+            "name": template_name,
+            "language": {
+                "code": language_code
+            }
+        }
     }
-
+    
+    print(f"[WHATSAPP_TEMPLATE] Sending to: {recipient_id}")
+    print(f"[WHATSAPP_TEMPLATE] Template: {template_name}, Language: {language_code}")
     print(f"[WHATSAPP_TEMPLATE] Full payload: {json.dumps(data, indent=2)}")
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(url, json=data, headers=headers)
-
+    print(f"[WHATSAPP_TEMPLATE] URL: {url}")
+    
     try:
-        response_json = response.json()
-    except:
-        response_json = None
-
-    if response.status_code == 200:
-        return {
-            "status": "success",
-            "status_code": response.status_code,
-            "response_json": response_json,
-            "message_id": response_json.get("messages", [{}])[0].get("id")
-        }
-    else:
-        return {
-            "status": "error",
-            "status_code": response.status_code,
-            "response_text": response.text[:500],
-            "response_json": response_json
-        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=data, headers=headers)
+            
+            print(f"[WHATSAPP_TEMPLATE] Response status: {response.status_code}")
+            print(f"[WHATSAPP_TEMPLATE] Response body: {response.text}")
+            
+            response_text = response.text
+            response_json = None
+            
+            try:
+                response_json = response.json()
+            except Exception as json_error:
+                response_json = None
+            
+            if response.status_code == 200:
+                result = {
+                    "status": "success", 
+                    "status_code": response.status_code, 
+                    "response_json": response_json,
+                    "message_id": response_json.get("messages", [{}])[0].get("id") if response_json else None
+                }
+                return result
+            else:
+                result = {
+                    "status": "error", 
+                    "status_code": response.status_code, 
+                    "response_text": response_text[:500], 
+                    "response_json": response_json
+                }
+                return result
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 def get_auth_url(user_id):
     print("Entered get_auth_url")
