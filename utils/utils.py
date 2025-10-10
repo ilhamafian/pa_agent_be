@@ -130,9 +130,9 @@ async def send_whatsapp_template(recipient_id: str, template_name: str, language
             "components": [
                 {
                     "type": "body",
-                    # "parameters": [
-                    #     {"type": "text", "text": "Hello"}
-                    # ]
+                    "parameters": [
+                        {"type": "text", "text": "Hello"}
+                    ]
                 }
             ]
         }
