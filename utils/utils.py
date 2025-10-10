@@ -119,13 +119,22 @@ async def send_whatsapp_template(recipient_id: str, template_name: str, language
     
     data = {
         "messaging_product": "whatsapp",
+        "recipient_type": "individual",
         "to": recipient_id,
         "type": "template",
         "template": {
             "name": template_name,
             "language": {
                 "code": language_code
-            }
+            },
+            "components": [
+                {
+                    "type": "body",
+                    # "parameters": [
+                    #     {"type": "text", "text": "Hello"}
+                    # ]
+                }
+            ]
         }
     }
     
