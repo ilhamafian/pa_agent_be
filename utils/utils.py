@@ -129,9 +129,17 @@ async def send_whatsapp_template(recipient_id: str, template_name: str, language
         }
     }
     
+    print(f"[WHATSAPP_TEMPLATE] Sending to: {recipient_id}")
+    print(f"[WHATSAPP_TEMPLATE] Template: {template_name}, Language: {language_code}")
+    print(f"[WHATSAPP_TEMPLATE] Full payload: {json.dumps(data, indent=2)}")
+    print(f"[WHATSAPP_TEMPLATE] URL: {url}")
+    
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, json=data, headers=headers)
+            
+            print(f"[WHATSAPP_TEMPLATE] Response status: {response.status_code}")
+            print(f"[WHATSAPP_TEMPLATE] Response body: {response.text}")
             
             response_text = response.text
             response_json = None
