@@ -21,8 +21,11 @@ class AnnouncementPayload(BaseModel):
 @router.post("/announcement")
 async def announcement(data: AnnouncementPayload):
     print("\n" + "="*80)
-    print(f"[ANNOUNCEMENT] Endpoint HIT! Received announcement: {data.announcement}")
-    print(f"[ANNOUNCEMENT] Request data type: {type(data)}")
+    print(f"[ANNOUNCEMENT] Endpoint HIT!")
+    print(f"[ANNOUNCEMENT] Parsed data.announcement: {data.announcement}")
+    print(f"[ANNOUNCEMENT] Parsed data.use_template: {data.use_template}")
+    print(f"[ANNOUNCEMENT] Parsed data.template_name: {data.template_name}")
+    print(f"[ANNOUNCEMENT] Raw model dict: {data.model_dump()}")
     print("="*80 + "\n")
     
     try:
