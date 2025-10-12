@@ -10,13 +10,26 @@ load_dotenv(dotenv_path=".env.local", override=True)
 MONGO_URI = os.getenv("MONGO_URI")
 MEMORY_MESSAGE_LIMIT = int(os.getenv("MEMORY_MESSAGE_LIMIT", "30"))
 
-client = MongoClient(MONGO_URI)
+client = MongoClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=5000,  # 5 second timeout for server selection
+    socketTimeoutMS=30000,  # 30 second timeout for socket operations
+    connectTimeoutMS=10000,  # 10 second timeout for initial connection
+    maxPoolSize=50  # Increase connection pool size for concurrent requests
+)
 
 db = client["oauth_db"]
 users_collection = db["users"]
 oauth_states_collection = db["oauth_states"]
 oauth_tokens_collection = db["oauth_tokens"]
 conversation_history_collection = db["conversation_history"]
+
+# Test connection
+try:
+    client.admin.command('ping')
+    print("✅ MongoDB connection established successfully")
+except Exception as e:
+    print(f"❌ MongoDB connection failed: {e}")
 
 # Create index on user_id for efficient querying
 try:
@@ -27,16 +40,62 @@ except Exception as e:
 
 def get_all_users():
     """Get all users from the users collection"""
-    # Access the users collection directly
-    users_collection = db["users"]
+    import time
+    from pymongo.errors import ExecutionTimeout, ServerSelectionTimeoutError
     
-    users = list(users_collection.find({}))
+    start_time = time.time()
     
-    # Transform the data to include user_id as string version of _id
-    for user in users:
-        user['user_id'] = str(user['_id'])
-    
-    return users if users else []
+    try:
+        print("[MONGO] Starting get_all_users query...")
+        # Access the users collection directly
+        users_collection = db["users"]
+        
+        # First, check connection is alive
+        print("[MONGO] Checking MongoDB connection...")
+        client.admin.command('ping')
+        print("[MONGO] MongoDB connection is healthy")
+        
+        print("[MONGO] Executing find({}) on users collection...")
+        # Only fetch the fields we need: _id and phone_number
+        projection = {"_id": 1, "phone_number": 1}
+        cursor = users_collection.find({}, projection, batch_size=100).max_time_ms(30000)  # 30 second timeout
+        print("[MONGO] Using projection to fetch only _id and phone_number fields")
+        
+        print("[MONGO] Converting cursor to list...")
+        users = []
+        count = 0
+        for user in cursor:
+            users.append(user)
+            count += 1
+            if count % 100 == 0:
+                print(f"[MONGO] Processed {count} users so far...")
+        
+        elapsed = time.time() - start_time
+        print(f"[MONGO] Fetched {len(users)} users in {elapsed:.2f} seconds")
+        
+        # Transform the data to include user_id as string version of _id
+        print("[MONGO] Transforming user_id fields...")
+        for idx, user in enumerate(users):
+            user['user_id'] = str(user['_id'])
+            if (idx + 1) % 100 == 0:
+                print(f"[MONGO] Transformed {idx + 1} users...")
+        
+        total_elapsed = time.time() - start_time
+        print(f"[MONGO] Completed get_all_users, returning {len(users)} users (total time: {total_elapsed:.2f}s)")
+        return users if users else []
+        
+    except ExecutionTimeout as e:
+        print(f"[MONGO] ❌ Query timeout after 30 seconds: {e}")
+        raise Exception(f"MongoDB query timeout: {e}")
+    except ServerSelectionTimeoutError as e:
+        print(f"[MONGO] ❌ Cannot connect to MongoDB server: {e}")
+        raise Exception(f"MongoDB connection failed: {e}")
+    except Exception as e:
+        elapsed = time.time() - start_time
+        print(f"[MONGO] ❌ Error in get_all_users after {elapsed:.2f}s: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 def get_conversation_history(user_id: str, fallback_memory: Dict = None) -> List[Dict]:
     """
