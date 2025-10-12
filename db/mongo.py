@@ -1,5 +1,6 @@
-from pymongo import MongoClient
+from pymongo import AsyncMongoClient
 import os
+import asyncio
 from datetime import datetime
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
@@ -10,12 +11,12 @@ load_dotenv(dotenv_path=".env.local", override=True)
 MONGO_URI = os.getenv("MONGO_URI")
 MEMORY_MESSAGE_LIMIT = int(os.getenv("MEMORY_MESSAGE_LIMIT", "30"))
 
-client = MongoClient(
+client = AsyncMongoClient(
     MONGO_URI,
-    serverSelectionTimeoutMS=5000,  # 5 second timeout for server selection
-    socketTimeoutMS=30000,  # 30 second timeout for socket operations
-    connectTimeoutMS=10000,  # 10 second timeout for initial connection
-    maxPoolSize=50  # Increase connection pool size for concurrent requests
+    serverSelectionTimeoutMS=5000,
+    socketTimeoutMS=30000,
+    connectTimeoutMS=10000,
+    maxPoolSize=100,  # you can increase a bit for high concurrency
 )
 
 db = client["oauth_db"]
@@ -24,21 +25,22 @@ oauth_states_collection = db["oauth_states"]
 oauth_tokens_collection = db["oauth_tokens"]
 conversation_history_collection = db["conversation_history"]
 
-# Test connection
-try:
-    client.admin.command('ping')
-    print("✅ MongoDB connection established successfully")
-except Exception as e:
-    print(f"❌ MongoDB connection failed: {e}")
+# Test connection and create index asynchronously
+async def init_mongodb():
+    try:
+        await client.admin.command('ping')
+        print("✅ MongoDB connection established successfully")
+        
+        # Create index on user_id for efficient querying
+        await conversation_history_collection.create_index("user_id")
+        print("✅ Created index on user_id for conversation_history collection")
+    except Exception as e:
+        print(f"❌ MongoDB initialization failed: {e}")
 
-# Create index on user_id for efficient querying
-try:
-    conversation_history_collection.create_index("user_id")
-    print("✅ Created index on user_id for conversation_history collection")
-except Exception as e:
-    print(f"⚠️ Index creation failed (might already exist): {e}")
+# Initialize in the background - moved to FastAPI lifespan in main.py
+# asyncio.create_task(init_mongodb())
 
-def get_all_users():
+async def get_all_users():
     """Get all users from the users collection"""
     import time
     from pymongo.errors import ExecutionTimeout, ServerSelectionTimeoutError
@@ -52,7 +54,7 @@ def get_all_users():
         
         # First, check connection is alive
         print("[MONGO] Checking MongoDB connection...")
-        client.admin.command('ping')
+        await client.admin.command('ping')
         print("[MONGO] MongoDB connection is healthy")
         
         print("[MONGO] Executing find({}) on users collection...")
@@ -64,7 +66,7 @@ def get_all_users():
         print("[MONGO] Converting cursor to list...")
         users = []
         count = 0
-        for user in cursor:
+        async for user in cursor:
             users.append(user)
             count += 1
             if count % 100 == 0:
@@ -97,7 +99,7 @@ def get_all_users():
         traceback.print_exc()
         raise
 
-def get_conversation_history(user_id: str, fallback_memory: Dict = None) -> List[Dict]:
+async def get_conversation_history(user_id: str, fallback_memory: Dict = None) -> List[Dict]:
     """
     Get conversation history for a user from MongoDB.
     Falls back to in-memory storage if MongoDB is unavailable.
@@ -125,7 +127,7 @@ def get_conversation_history(user_id: str, fallback_memory: Dict = None) -> List
             return fallback_memory[user_id]
         return []
 
-def save_message_to_history(user_id: str, message: Dict, fallback_memory: Dict = None) -> bool:
+async def save_message_to_history(user_id: str, message: Dict, fallback_memory: Dict = None) -> bool:
     """
     Save a message to conversation history with automatic 30-message limit enforcement.
     Falls back to in-memory storage if MongoDB is unavailable.
@@ -181,7 +183,7 @@ def save_message_to_history(user_id: str, message: Dict, fallback_memory: Dict =
                 fallback_memory[user_id] = fallback_memory[user_id][-MEMORY_MESSAGE_LIMIT:]
         return False
 
-def migrate_memory_to_mongodb(user_memory: Dict) -> int:
+async def migrate_memory_to_mongodb(user_memory: Dict) -> int:
     """
     Migrate existing in-memory conversation data to MongoDB.
     
@@ -224,7 +226,7 @@ def migrate_memory_to_mongodb(user_memory: Dict) -> int:
     print(f"✅ Migration complete: {migrated_count} users migrated to MongoDB")
     return migrated_count
 
-def clear_conversation_history(user_id: str) -> bool:
+async def clear_conversation_history(user_id: str) -> bool:
     """
     Clear conversation history for a specific user.
     

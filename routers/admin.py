@@ -36,8 +36,8 @@ async def announcement(request: Request, data: AnnouncementPayload):
     
     try:
         print("[ANNOUNCEMENT] Step 1: Fetching users from MongoDB...")
-        # Run the synchronous MongoDB call in a thread pool to avoid blocking
-        users = await asyncio.to_thread(get_all_users_mongo)
+        # Call the async MongoDB function to fetch users
+        users = await get_all_users_mongo()
         print(f"[ANNOUNCEMENT] Step 1 Complete: Retrieved {len(users) if users else 0} users")
         
         if not users:
@@ -110,8 +110,8 @@ async def announcement(request: Request, data: AnnouncementPayload):
 @router.get("/total_users")
 async def get_total_users():
     try:
-        # Run the synchronous MongoDB call in a thread pool to avoid blocking
-        users = await asyncio.to_thread(get_all_users_mongo)
+        # Call the async MongoDB function to fetch users
+        users = await get_all_users_mongo()
         return {"total": len(users)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch users: {e}")

@@ -168,21 +168,29 @@ async def send_whatsapp_template(recipient_id: str, template_name: str, language
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
-def get_auth_url(user_id):
+async def get_auth_url(user_id):
     print("Entered get_auth_url")
-    flow = Flow.from_client_secrets_file(
-        "credentials.json",
-        scopes=SCOPES,
-        redirect_uri=redirect_uri  # 🔁 You handle this below
+    # Create flow in executor since it's blocking
+    loop = asyncio.get_running_loop()
+    flow = await loop.run_in_executor(None, 
+        lambda: Flow.from_client_secrets_file(
+            "credentials.json",
+            scopes=SCOPES,
+            redirect_uri=redirect_uri
+        )
     )
 
-    auth_url, state = flow.authorization_url(
-        prompt='consent',
-        access_type='offline',
-        include_granted_scopes='true'
+    # Get auth URL in executor since it makes HTTP requests
+    auth_url, state = await loop.run_in_executor(None,
+        lambda: flow.authorization_url(
+            prompt='consent',
+            access_type='offline',
+            include_granted_scopes='true'
+        )
     )
 
-    oauth_states_collection.update_one(
+    # Update MongoDB asynchronously
+    await oauth_states_collection.update_one(
         {"user_id": user_id},
         {
             "$set": {
@@ -216,14 +224,18 @@ def get_event_loop():
         event_loop_ready.wait(timeout=5)
     return event_loop
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     print("Authorization header received")
 
     token = credentials.credentials
     print(f"Token starts with: {token[:10]}... (length: {len(token)})")
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Run JWT decode in executor since it's CPU-bound
+        loop = asyncio.get_running_loop()
+        payload = await loop.run_in_executor(None,
+            lambda: jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        )
         print(f"Decoded JWT payload: {payload}")
     except jwt.ExpiredSignatureError:
         print("JWT token has expired")
@@ -238,7 +250,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
     return payload
 
-def get_dashboard_events(user_id: str):
+async def get_dashboard_events(user_id: str):
     """
     Get events for the current day (starting at 00:00am) through the next 3 days.
     Returns events in JSON format with title, date (DD-MM-YYYY), and time.
@@ -336,13 +348,17 @@ def get_dashboard_events(user_id: str):
         end_time = start_time + timedelta(days=6) - timedelta(seconds=1)
 
         # Fetch events matching this window
-        events = list(calendar_collection.find({
+        cursor = calendar_collection.find({
             "user_id": user_id,
             "$or": [
                 {"start.dateTime": {"$gte": start_time.isoformat(), "$lte": end_time.isoformat()}},
                 {"start.date": {"$gte": start_time.date().isoformat(), "$lte": end_time.date().isoformat()}}
             ]
-        }).sort("start.dateTime", 1))
+        }).sort("start.dateTime", 1)
+        
+        events = []
+        async for event in cursor:
+            events.append(event)
 
         formatted_events = []
 

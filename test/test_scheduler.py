@@ -46,7 +46,7 @@ async def test_today_reminder_job():
     
     try:
         today = datetime.now(pytz.timezone("Asia/Kuala_Lumpur")).date()
-        users = get_all_users() or []
+        users = await get_all_users() or []
         print(f"[TEST] Found {len(users)} users to test")
         
         if not users:
@@ -80,7 +80,7 @@ async def test_today_reminder_job():
             
             # Fetch events for today
             print(f"📅 Fetching events for {today}...")
-            events = get_events_for_user_on_date(user_id, today)
+            events = await get_events_for_user_on_date(user_id, today)
             print(f"Found {len(events)} events")
             
             # Fetch pending and in-progress tasks
@@ -113,7 +113,7 @@ async def test_tomorrow_reminder_job():
     
     try:
         tomorrow = (datetime.now(pytz.timezone("Asia/Kuala_Lumpur")) + timedelta(days=1)).date()
-        users = get_all_users() or []
+        users = await get_all_users() or []
         print(f"[TEST] Found {len(users)} users to test")
         
         if not users:
@@ -147,7 +147,7 @@ async def test_tomorrow_reminder_job():
             
             # Fetch events for tomorrow
             print(f"📅 Fetching events for {tomorrow}...")
-            events = get_events_for_user_on_date(user_id, tomorrow)
+            events = await get_events_for_user_on_date(user_id, tomorrow)
             print(f"Found {len(events)} events")
             
             # Fetch pending and in-progress tasks

@@ -39,7 +39,7 @@ now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
 today_str = now.strftime("%Y-%m-%d")
 tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
-def get_events_for_user_on_date(user_id, target_date):
+async def get_events_for_user_on_date(user_id, target_date):
     """
     Fetch events for a user on a specific date from MongoDB.
     
@@ -104,10 +104,14 @@ def get_events_for_user_on_date(user_id, target_date):
         end_time = tz.localize(datetime.combine(target_date, datetime.max.time()))
         
         # Query MongoDB for events within the date range
-        events = list(calendar_collection.find({
+        cursor = calendar_collection.find({
             "user_id": user_id,
             "start_time": {"$gte": start_time, "$lte": end_time}
-        }).sort("start_time", 1))  # Sort by start_time ascending
+        }).sort("start_time", 1)  # Sort by start_time ascending
+        
+        events = []
+        async for event in cursor:
+            events.append(event)
         
         print(f"[EVENTS FETCH] {len(events)} events fetched from MongoDB.")
         
@@ -278,11 +282,11 @@ def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     return "\n".join(lines)
 
 def start_scheduler():
-    def today_reminder_job():
+    async def today_reminder_job():
         try:
             print("\n[TODAY REMINDER JOB] Starting morning reminder job...")
             today = datetime.now(pytz.timezone("Asia/Kuala_Lumpur")).date()
-            users = get_all_users() or []
+            users = await get_all_users() or []
             print(f"[TODAY REMINDER JOB] Checking events and tasks for {len(users)} users on {today}")
 
             for user in users:
@@ -307,7 +311,7 @@ def start_scheduler():
                 print(f"[TODAY REMINDER JOB] Fetching data for user_id: {user_id}")
                 
                 # Fetch events for today
-                events, token_expired = get_events_for_user_on_date(user_id, today)
+                events, token_expired = await get_events_for_user_on_date(user_id, today)
                 print(f"[TODAY REMINDER JOB] Found {len(events)} events for user {user_id}, token_expired: {token_expired}")
                 
                 # Fetch pending and in-progress tasks
@@ -378,11 +382,11 @@ def start_scheduler():
         except Exception as e:
             print(f"🔥 [TODAY REMINDER JOB ERROR] {e}")
 
-    def tomorrow_reminder_job():
+    async def tomorrow_reminder_job():
         try:
             print("\n[TOMORROW REMINDER JOB] Starting daily reminder job...")
             tomorrow = (datetime.now(pytz.timezone("Asia/Kuala_Lumpur")) + timedelta(days=1)).date()
-            users = get_all_users() or []
+            users = await get_all_users() or []
             print(f"[TOMORROW REMINDER JOB] Checking events and tasks for {len(users)} users on {tomorrow}")
 
             for user in users:
@@ -409,7 +413,7 @@ def start_scheduler():
                 print(f"[TOMORROW REMINDER JOB] Fetching data for user_id: {user_id}")
                 
                 # Fetch events for tomorrow
-                events, token_expired = get_events_for_user_on_date(user_id, tomorrow)
+                events, token_expired = await get_events_for_user_on_date(user_id, tomorrow)
                 print(f"[TOMORROW REMINDER JOB] Found {len(events)} events for user {user_id}, token_expired: {token_expired}")
                 
                 # Fetch pending and in-progress tasks

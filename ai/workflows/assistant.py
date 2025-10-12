@@ -45,10 +45,7 @@ from tools.notes import (
     retrieve_note
 )
 from utils.utils import clean_unicode, encrypt_phone, get_auth_url, hash_data, send_whatsapp_message
-from db.mongo import client
-
-db = client["oauth_db"]
-users_collection = db["users"]
+from db.mongo import users_collection
 
 load_dotenv(dotenv_path=".env.local", override=True)
 
@@ -103,7 +100,7 @@ async def assistant_response(sender: str, text: str):
     try:
         phone_number = sender
         hashed_number = hash_data(sender)
-        user = users_collection.find_one({"hashed_phone_number": hashed_number})
+        user = await users_collection.find_one({"hashed_phone_number": hashed_number})
         
         if not user:
             print(f"❌ UNEXPECTED: User not found in assistant_response for sender: {sender}")
@@ -111,7 +108,7 @@ async def assistant_response(sender: str, text: str):
             print(f"❌ This should not happen as main.py already checked user existence")
             
             # Try one more time to rule out transient database issues
-            user_retry = users_collection.find_one({"hashed_phone_number": hashed_number})
+            user_retry = await users_collection.find_one({"hashed_phone_number": hashed_number})
             if user_retry:
                 print(f"✅ RETRY SUCCESS: User found on second attempt")
                 user = user_retry
@@ -137,11 +134,11 @@ async def assistant_response(sender: str, text: str):
         system_prompt = system_prompt_template.format(today=today_str, tomorrow=tomorrow_str, about_yourself=about_yourself, profession=profession, language=language)
 
         # Get conversation history from MongoDB (with fallback to in-memory)
-        history = get_conversation_history(user_id, user_memory)
+        history = await get_conversation_history(user_id, user_memory)
         
         # Add user message to history
         user_message = {"role": "user", "content": user_input}
-        save_message_to_history(user_id, user_message, user_memory)
+        await save_message_to_history(user_id, user_message, user_memory)
         history.append(user_message)
 
         # Prepare chat messages with system prompt + recent history (last 10 messages)
@@ -426,7 +423,7 @@ async def assistant_response(sender: str, text: str):
                 
                 # Save assistant message to history
                 assistant_message = {"role": "assistant", "content": reply}
-                save_message_to_history(user_id, assistant_message, user_memory)
+                await save_message_to_history(user_id, assistant_message, user_memory)
                 
                 return {"ok": True}
 
@@ -439,7 +436,7 @@ async def assistant_response(sender: str, text: str):
             
             # Save assistant message to history
             assistant_message = {"role": "assistant", "content": reply}
-            save_message_to_history(user_id, assistant_message, user_memory)
+            await save_message_to_history(user_id, assistant_message, user_memory)
 
         return {"ok": True}
 

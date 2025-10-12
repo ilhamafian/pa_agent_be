@@ -23,13 +23,16 @@ load_dotenv(dotenv_path=".env.local", override=True)  # Make sure environment va
 # MongoDB Calendar Collection
 calendar_collection = db["calendar"]
 
-# Create indexes for efficient querying
-try:
-    calendar_collection.create_index("user_id")
-    calendar_collection.create_index([("user_id", 1), ("start_time", 1)])
-    print("✅ Created indexes on calendar collection")
-except Exception as e:
-    print(f"⚠️ Index creation failed (might already exist): {e}")
+# Index creation moved to FastAPI lifespan in main.py
+# Async index creation function for proper initialization
+async def init_calendar_indexes():
+    """Initialize calendar collection indexes"""
+    try:
+        await calendar_collection.create_index("user_id")
+        await calendar_collection.create_index([("user_id", 1), ("start_time", 1)])
+        print("✅ Created indexes on calendar collection")
+    except Exception as e:
+        print(f"⚠️ Calendar index creation failed (might already exist): {e}")
 
 class AuthRequiredError(Exception):
     """Legacy exception for Google Calendar auth - kept for compatibility"""

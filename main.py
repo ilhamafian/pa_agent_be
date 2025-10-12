@@ -15,6 +15,7 @@ from routers.settings import router as settings_router
 from routers.integrations import router as integrations_router
 from routers.dashboard import router as dashboard_router
 from routers.admin import router as admin_router
+from contextlib import asynccontextmanager
 # Internal Imports
 from tools.scheduler import start_scheduler
 from ai.workflows.assistant import assistant_response
@@ -33,7 +34,33 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 APP_URL = os.getenv("APP_URL")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 
-app = FastAPI()
+# ✅ Define lifespan first
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # === Startup ===
+    print("🚀 Starting FastAPI lifespan setup...")
+    
+    # Initialize MongoDB connection and create indexes
+    from db.mongo import init_mongodb
+    await init_mongodb()
+    
+    # Initialize calendar indexes
+    from tools.calendar import init_calendar_indexes
+    await init_calendar_indexes()
+    
+    # Optional: start your scheduler here
+    start_scheduler()
+    print("✅ Scheduler started")
+    
+    yield  # ✅ Allow FastAPI to run
+
+    # === Shutdown ===
+    print("🛑 Shutting down FastAPI app...")
+    client.close()
+    print("✅ MongoDB connection closed")
+
+# ✅ Now create app with lifespan handler
+app = FastAPI(lifespan=lifespan)
 
 # === Middleware ===
 origins = [
@@ -241,9 +268,6 @@ for route in app.routes:
     if hasattr(route, 'methods') and hasattr(route, 'path'):
         print(f"  - {list(route.methods)} {route.path}")
 print("="*80 + "\n")
-
-# === Start Scheduler ===
-start_scheduler()
 
 # === Run Server ===
 if __name__ == "__main__":
