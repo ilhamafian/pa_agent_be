@@ -148,7 +148,7 @@ async def assistant_response(sender: str, text: str):
         chat_messages = [{"role": "system", "content": system_prompt}] + history[-10:]
 
         response = client.responses.create(
-            model="gpt-4o",
+            model="gpt-3.5-turbo",
             input=chat_messages,
             tools=_flatten_response_tools(tools),
             tool_choice="auto"

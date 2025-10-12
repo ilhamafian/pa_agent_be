@@ -34,7 +34,7 @@ def create_note(user_id: str = None, content: str = None, title: str = None) -> 
         try:
             # Use OpenAI Responses API to generate a meaningful title
             title_response = openai_client.responses.create(
-                model="gpt-4o-mini",
+                model="gpt-3.5-turbo",
                 input=[
                     {"role": "system", "content": "Generate a concise, descriptive title (max 50 characters) for the following note content. The title should capture the main topic or essence of the note."},
                     {"role": "user", "content": content}
