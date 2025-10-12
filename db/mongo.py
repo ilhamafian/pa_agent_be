@@ -32,12 +32,11 @@ except Exception as e:
     print(f"❌ MongoDB connection failed: {e}")
 
 # Create index on user_id for efficient querying
-# Using create_index is idempotent - it won't recreate if already exists
 try:
     conversation_history_collection.create_index("user_id")
-    print("✅ Created/verified index on user_id for conversation_history collection")
+    print("✅ Created index on user_id for conversation_history collection")
 except Exception as e:
-    print(f"⚠️ Index creation failed: {e}")
+    print(f"⚠️ Index creation failed (might already exist): {e}")
 
 def get_all_users():
     """Get all users from the users collection"""
