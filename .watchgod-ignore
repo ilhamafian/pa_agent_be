@@ -1,0 +1,13 @@
+# Ignore patterns for uvicorn --reload
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.env
+.env.local
+venv/
+.git/
+*.db
+*.sqlite
+test/
+
