@@ -2,11 +2,14 @@
 
 from datetime import datetime, timedelta
 import json
+from typing import List, Dict
 from zoneinfo import ZoneInfo
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
 from db.mongo import get_conversation_history, save_message_to_history
+from cachetools import TTLCache
+import asyncio
 
 # Internal Imports
 from tools.calendar import (
@@ -52,7 +55,62 @@ load_dotenv(dotenv_path=".env.local", override=True)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 APP_URL = os.getenv("APP_URL")
 
-user_memory = {}
+# Conversation history cache - caches for 5 minutes with max 5000 users
+conversation_cache = TTLCache(maxsize=5000, ttl=300)  # 5 minutes TTL
+
+async def get_cached_conversation_history(user_id: str) -> List[Dict]:
+    """
+    Get conversation history with caching to reduce database load.
+
+    Args:
+        user_id: The user's ID
+
+    Returns:
+        List of message dictionaries with 'role' and 'content' keys
+    """
+    # Try to get from cache first
+    if user_id in conversation_cache:
+        print(f"📋 Cache hit for user {user_id}")
+        return conversation_cache[user_id]
+
+    # Cache miss - load from database
+    print(f"💾 Cache miss for user {user_id} - loading from MongoDB")
+    history = await get_conversation_history(user_id)
+
+    # Store in cache for future requests
+    conversation_cache[user_id] = history
+
+    return history
+
+def clear_user_cache(user_id: str) -> bool:
+    """
+    Clear cached conversation history for a specific user.
+
+    Args:
+        user_id: The user's ID
+
+    Returns:
+        True if cache entry existed and was cleared, False otherwise
+    """
+    if user_id in conversation_cache:
+        del conversation_cache[user_id]
+        print(f"🗑️ Cleared cache for user {user_id}")
+        return True
+    return False
+
+def get_cache_stats() -> Dict:
+    """
+    Get cache statistics for monitoring.
+
+    Returns:
+        Dictionary with cache statistics
+    """
+    return {
+        "maxsize": conversation_cache.maxsize,
+        "currsize": conversation_cache.currsize,
+        "ttl": conversation_cache.ttl,
+    }
+
 tools = [
     create_event_tool,
     get_events_tool,
@@ -133,12 +191,21 @@ async def assistant_response(sender: str, text: str):
         tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
         system_prompt = system_prompt_template.format(today=today_str, tomorrow=tomorrow_str, about_yourself=about_yourself, profession=profession, language=language)
 
-        # Get conversation history from MongoDB (with fallback to in-memory)
-        history = await get_conversation_history(user_id, user_memory)
-        
+        # Get conversation history from cache (falls back to MongoDB)
+        history = await get_cached_conversation_history(user_id)
+
         # Add user message to history
         user_message = {"role": "user", "content": user_input}
-        await save_message_to_history(user_id, user_message, user_memory)
+        await save_message_to_history(user_id, user_message)
+
+        # Update cache with new message (maintain limit)
+        if user_id in conversation_cache:
+            conversation_cache[user_id].append(user_message)
+            # Keep only the latest messages (same limit as MongoDB)
+            from db.mongo import MEMORY_MESSAGE_LIMIT
+            if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
+                conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
+
         history.append(user_message)
 
         # Prepare chat messages with system prompt + recent history (last 10 messages)
@@ -423,7 +490,15 @@ async def assistant_response(sender: str, text: str):
                 
                 # Save assistant message to history
                 assistant_message = {"role": "assistant", "content": reply}
-                await save_message_to_history(user_id, assistant_message, user_memory)
+                await save_message_to_history(user_id, assistant_message)
+
+                # Update cache with assistant message
+                if user_id in conversation_cache:
+                    conversation_cache[user_id].append(assistant_message)
+                    # Keep only the latest messages (same limit as MongoDB)
+                    from db.mongo import MEMORY_MESSAGE_LIMIT
+                    if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
+                        conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
                 
                 return {"ok": True}
 
@@ -436,7 +511,15 @@ async def assistant_response(sender: str, text: str):
             
             # Save assistant message to history
             assistant_message = {"role": "assistant", "content": reply}
-            await save_message_to_history(user_id, assistant_message, user_memory)
+            await save_message_to_history(user_id, assistant_message)
+
+            # Update cache with assistant message
+            if user_id in conversation_cache:
+                conversation_cache[user_id].append(assistant_message)
+                # Keep only the latest messages (same limit as MongoDB)
+                from db.mongo import MEMORY_MESSAGE_LIMIT
+                if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
+                    conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
 
         return {"ok": True}
 

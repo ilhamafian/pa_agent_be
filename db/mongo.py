@@ -99,20 +99,18 @@ async def get_all_users():
         traceback.print_exc()
         raise
 
-async def get_conversation_history(user_id: str, fallback_memory: Dict = None) -> List[Dict]:
+async def get_conversation_history(user_id: str) -> List[Dict]:
     """
     Get conversation history for a user from MongoDB.
-    Falls back to in-memory storage if MongoDB is unavailable.
-    
+
     Args:
         user_id: The user's ID
-        fallback_memory: In-memory user_memory dict for fallback
-    
+
     Returns:
         List of message dictionaries with 'role' and 'content' keys
     """
     try:
-        # Try MongoDB first
+        # Get from MongoDB
         doc = conversation_history_collection.find_one({"user_id": user_id})
         if doc and "messages" in doc:
             print(f"📥 Retrieved {len(doc['messages'])} messages from MongoDB for user {user_id}")
@@ -121,24 +119,19 @@ async def get_conversation_history(user_id: str, fallback_memory: Dict = None) -
             print(f"📭 No conversation history found in MongoDB for user {user_id}")
             return []
     except Exception as e:
-        print(f"⚠️ MongoDB unavailable, falling back to in-memory storage: {e}")
-        # Fallback to in-memory storage
-        if fallback_memory and user_id in fallback_memory:
-            return fallback_memory[user_id]
+        print(f"❌ Error retrieving conversation history for user {user_id}: {e}")
         return []
 
-async def save_message_to_history(user_id: str, message: Dict, fallback_memory: Dict = None) -> bool:
+async def save_message_to_history(user_id: str, message: Dict) -> bool:
     """
     Save a message to conversation history with automatic 30-message limit enforcement.
-    Falls back to in-memory storage if MongoDB is unavailable.
-    
+
     Args:
         user_id: The user's ID
         message: Message dict with 'role' and 'content' keys
-        fallback_memory: In-memory user_memory dict for fallback
-    
+
     Returns:
-        True if saved to MongoDB, False if fell back to memory
+        True if saved successfully, False otherwise
     """
     try:
         # Use $push with $slice to maintain message limit automatically
@@ -155,76 +148,28 @@ async def save_message_to_history(user_id: str, message: Dict, fallback_memory: 
             },
             upsert=True
         )
-        
+
         if result.upserted_id or result.modified_count > 0:
             print(f"💾 Saved message to MongoDB for user {user_id}")
             return True
         else:
             print(f"⚠️ Failed to save message to MongoDB for user {user_id}")
-            # Fall back to in-memory
-            if fallback_memory is not None:
-                if user_id not in fallback_memory:
-                    fallback_memory[user_id] = []
-                fallback_memory[user_id].append(message)
-                # Manually enforce limit for in-memory storage
-                if len(fallback_memory[user_id]) > MEMORY_MESSAGE_LIMIT:
-                    fallback_memory[user_id] = fallback_memory[user_id][-MEMORY_MESSAGE_LIMIT:]
             return False
-            
+
     except Exception as e:
-        print(f"⚠️ MongoDB error, saving to in-memory storage: {e}")
-        # Fall back to in-memory storage
-        if fallback_memory is not None:
-            if user_id not in fallback_memory:
-                fallback_memory[user_id] = []
-            fallback_memory[user_id].append(message)
-            # Manually enforce limit for in-memory storage
-            if len(fallback_memory[user_id]) > MEMORY_MESSAGE_LIMIT:
-                fallback_memory[user_id] = fallback_memory[user_id][-MEMORY_MESSAGE_LIMIT:]
+        print(f"❌ Error saving message to MongoDB for user {user_id}: {e}")
         return False
 
-async def migrate_memory_to_mongodb(user_memory: Dict) -> int:
+async def migrate_memory_to_mongodb() -> int:
     """
-    Migrate existing in-memory conversation data to MongoDB.
-    
-    Args:
-        user_memory: Current in-memory user_memory dict
-    
+    Migration function for future use if needed.
+    Currently not used since we're using MongoDB as primary storage.
+
     Returns:
-        Number of users migrated
+        Always returns 0 since no migration is needed
     """
-    if not user_memory:
-        print("📭 No in-memory conversations to migrate")
-        return 0
-    
-    migrated_count = 0
-    
-    for user_id, messages in user_memory.items():
-        try:
-            # Apply message limit during migration
-            limited_messages = messages[-MEMORY_MESSAGE_LIMIT:] if len(messages) > MEMORY_MESSAGE_LIMIT else messages
-            
-            result = conversation_history_collection.update_one(
-                {"user_id": user_id},
-                {
-                    "$set": {
-                        "user_id": user_id,
-                        "messages": limited_messages,
-                        "updated_at": datetime.now()
-                    }
-                },
-                upsert=True
-            )
-            
-            if result.upserted_id or result.modified_count > 0:
-                print(f"🔄 Migrated {len(limited_messages)} messages for user {user_id}")
-                migrated_count += 1
-            
-        except Exception as e:
-            print(f"❌ Failed to migrate user {user_id}: {e}")
-    
-    print(f"✅ Migration complete: {migrated_count} users migrated to MongoDB")
-    return migrated_count
+    print("📭 No migration needed - using MongoDB as primary storage")
+    return 0
 
 async def clear_conversation_history(user_id: str) -> bool:
     """
