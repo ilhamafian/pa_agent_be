@@ -371,10 +371,11 @@ async def reload_reminders():
         now = datetime.now(tz)
         
         # Find all scheduled reminders that haven't been sent yet
-        scheduled_reminders = list(await reminders_collection.find({
+        cursor = reminders_collection.find({
             "status": "scheduled",
             "reminder_time": {"$exists": True}
-        }))
+        })
+        scheduled_reminders = await cursor.to_list(length=None)
         
         print(f"[REMINDER RELOAD] Found {len(scheduled_reminders)} scheduled reminders in database")
         
@@ -454,11 +455,12 @@ async def list_reminders(user_id=None) -> dict:
     now = datetime.now(pytz.timezone("Asia/Kuala_Lumpur"))
     
     # Get all active reminders for the user
-    reminders = list(await reminders_collection.find({
+    cursor = reminders_collection.find({
         "user_id": user_id,
         "status": "scheduled",
         "reminder_time": {"$gte": now}
-    }).sort("reminder_time", 1))
+    }).sort("reminder_time", 1)
+    reminders = await cursor.to_list(length=None)
     
     if not reminders:
         return {"status": "success", "message": "📅 You have no scheduled reminders."}

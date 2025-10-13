@@ -17,7 +17,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 print(f"Project root: {project_root}")  # Debug print
 
-def test_today_reminder():
+async def test_today_reminder():
     """Test today's reminder job"""
     from tools.scheduler import start_scheduler
     
@@ -28,12 +28,12 @@ def test_today_reminder():
     from tools.scheduler import trigger_today_reminder_manually
     
     # Start scheduler to initialize everything
-    start_scheduler()
+    await start_scheduler()
     
     # Manually trigger the job
     trigger_today_reminder_manually()
 
-def test_tomorrow_reminder():
+async def test_tomorrow_reminder():
     """Test tomorrow's reminder job"""
     from tools.scheduler import start_scheduler
     
@@ -44,7 +44,7 @@ def test_tomorrow_reminder():
     from tools.scheduler import trigger_tomorrow_reminder_manually
     
     # Start scheduler to initialize everything
-    start_scheduler()
+    await start_scheduler()
     
     # Manually trigger the job
     trigger_tomorrow_reminder_manually()

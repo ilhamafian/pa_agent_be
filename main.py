@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     await init_calendar_indexes()
     
     # Optional: start your scheduler here
-    start_scheduler()
+    await start_scheduler()
     print("✅ Scheduler started")
     
     yield  # ✅ Allow FastAPI to run
