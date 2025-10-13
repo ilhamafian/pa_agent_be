@@ -2,9 +2,14 @@ from datetime import datetime
 import pytz
 import uuid
 from db.mongo import client
+from dotenv import load_dotenv
+import os
 
 # Task collection setup
-db = client["oauth_db"]
+load_dotenv(dotenv_path=".env.local", override=True)
+
+db_name = os.environ.get("DB_NAME")
+db = client[db_name]
 task_list_collection = db["task_list"]
 
 class AuthRequiredError(Exception):

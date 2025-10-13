@@ -8,13 +8,15 @@ from jose import jwt
 from bson import ObjectId
 from db.mongo import client
 from utils.utils import hash_data
+import os
 
 load_dotenv(dotenv_path=".env.local", override=True)
 
 router = APIRouter()
 
 # MongoDB setup
-db = client["oauth_db"]
+db_name = os.environ.get("DB_NAME")
+db = client[db_name]
 users_collection = db["users"]
 
 class UserIdPayload(BaseModel):

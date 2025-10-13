@@ -3,12 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from bson import ObjectId
 from db.mongo import client
 from utils.utils import get_auth_url, get_current_user
+import os
 
 load_dotenv(dotenv_path=".env.local", override=True)
 
 router = APIRouter()
 
-db = client["oauth_db"]
+db_name = os.environ.get("DB_NAME")
+db = client[db_name]
 integrations_collection = db["integrations"]
 
 @router.get("/get_integrations")

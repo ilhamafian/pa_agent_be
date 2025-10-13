@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=".env.local", override=True)
 
 # Notes collection setup
-db = client["oauth_db"]
+db_name = os.environ.get("DB_NAME")
+db = client[db_name]
 notes_collection = db["notes"]
 
 # OpenAI client for embeddings

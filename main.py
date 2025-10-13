@@ -22,10 +22,6 @@ from ai.workflows.assistant import assistant_response
 from db.mongo import oauth_states_collection, oauth_tokens_collection
 from utils.utils import hash_data, send_whatsapp_message
 
-db = client["oauth_db"]
-users_collection = db["users"]
-integrations_collection = db["integrations"]
-
 # === Setup ===
 load_dotenv(dotenv_path=".env.local", override=True)
 
@@ -33,6 +29,12 @@ SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 APP_URL = os.getenv("APP_URL")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
+
+
+db_name = os.environ.get("DB_NAME")
+db = client[db_name]
+users_collection = db["users"]
+integrations_collection = db["integrations"]
 
 # ✅ Define lifespan first
 @asynccontextmanager

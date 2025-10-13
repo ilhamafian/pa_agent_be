@@ -1,10 +1,15 @@
 from datetime import datetime
+from dotenv import load_dotenv
+import os
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from db.mongo import client
 from utils.utils import get_current_user, get_dashboard_events
 
-db = client["oauth_db"]
+load_dotenv(dotenv_path=".env.local", override=True)
+
+db_name = os.environ.get("DB_NAME")
+db = client[db_name]
 tasks_collection = db["task_list"]
 bugs_collection = db["bugs"]
 

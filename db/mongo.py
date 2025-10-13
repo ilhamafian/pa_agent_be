@@ -19,7 +19,8 @@ client = AsyncMongoClient(
     maxPoolSize=100,  # you can increase a bit for high concurrency
 )
 
-db = client["oauth_db"]
+db_name = os.environ.get("DB_NAME")
+db = client[db_name]
 users_collection = db["users"]
 oauth_states_collection = db["oauth_states"]
 oauth_tokens_collection = db["oauth_tokens"]

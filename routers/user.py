@@ -25,7 +25,8 @@ with open("ai/prompts/onboarding_guide.txt", "r", encoding="utf-8") as f:
 router = APIRouter()
 
 # MongoDB setup
-db = client["oauth_db"]
+db_name = os.environ.get("DB_NAME")
+db = client[db_name]
 users_collection = db["users"]
 waitlist_collection = db["waitlist"]
 integrations_collection = db["integrations"]

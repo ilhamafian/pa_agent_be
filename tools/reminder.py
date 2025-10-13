@@ -11,11 +11,13 @@ from db.mongo import oauth_tokens_collection
 from utils.utils import send_whatsapp_message, get_event_loop
 from bson import ObjectId
 from db.mongo import client
+import os
 
 # Load environment variables first
 load_dotenv(dotenv_path=".env.local", override=True)
 
-db = client["oauth_db"]  # Using same database as existing oauth collections
+db_name = os.environ.get("DB_NAME")
+db = client[db_name]  # Using same database as existing oauth collections
 reminders_collection = db["reminders"]
 
 SCOPES = json.loads(os.getenv("SCOPES", "[]"))
