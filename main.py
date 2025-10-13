@@ -94,7 +94,8 @@ async def log_requests(request: Request, call_next):
 executor = ThreadPoolExecutor()
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
-print("🚀 FastAPI app started!")
+print("🚀 FastAPI app started in Staging!")
+print(f"DB_NAME: {db_name}")
 
 # === Routes ===
 @app.get("/")
