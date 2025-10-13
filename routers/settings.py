@@ -84,21 +84,21 @@ async def update_profile(data: UpdateProfilePayload):
 
     return {"message": "Profile updated successfully"}
 
-@router.post("/update_notifications")
-async def update_notifications(data: UpdateNotificationsPayload):
-    user_id = data.user_id
-    print(f"Updating notifications for user: {user_id}")
+# @router.post("/update_notifications")
+# async def update_notifications(data: UpdateNotificationsPayload):
+#     user_id = data.user_id
+#     print(f"Updating notifications for user: {user_id}")
 
-    # Ensure valid ObjectId
-    try:
-        ObjectId(user_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid ObjectId format")
+#     # Ensure valid ObjectId
+#     try:
+#         ObjectId(user_id)
+#     except Exception:
+#         raise HTTPException(status_code=400, detail="Invalid ObjectId format")
 
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Settings not found")
+#     if result.matched_count == 0:
+#         raise HTTPException(status_code=404, detail="Settings not found")
     
-    if result.modified_count == 0:
-        return {"message": "No changes made"}
+#     if result.modified_count == 0:
+#         return {"message": "No changes made"}
 
-    return {"message": "Notifications updated successfully"}
+#     return {"message": "Notifications updated successfully"}
