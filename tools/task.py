@@ -10,7 +10,7 @@ task_list_collection = db["task_list"]
 class AuthRequiredError(Exception):
     pass
 
-def create_task(title: str = None, priority: str = "medium", user_id=None, description: str = None) -> dict:
+async def create_task(title: str = None, priority: str = "medium", user_id=None, description: str = None) -> dict:
     if user_id is None:
         raise ValueError("Missing user_id in create_task() call!")
     
@@ -37,7 +37,7 @@ def create_task(title: str = None, priority: str = "medium", user_id=None, descr
     print("Task object:", task)
     
     # Update user document - add task to tasks array
-    result = task_list_collection.update_one(
+    result = await task_list_collection.update_one(
         {"user_id": user_id},
         {
             "$push": {"tasks": task},
@@ -49,7 +49,7 @@ def create_task(title: str = None, priority: str = "medium", user_id=None, descr
     print(f'Task added to user {user_id} - Modified: {result.modified_count}, Upserted: {result.upserted_id}')
     return task
 
-def get_tasks(user_id: str, status: str = None, priority: str = None) -> list:
+async def get_tasks(user_id: str, status: str = None, priority: str = None) -> list:
     """Get all tasks for a user, optionally filtered by status and/or priority.
     If status is 'completed', return only the latest 5 completed tasks.
     If no status is given, return all tasks but limit completed ones to latest 5.
@@ -57,7 +57,7 @@ def get_tasks(user_id: str, status: str = None, priority: str = None) -> list:
     
     print("Getting tasks for user_id:", user_id)
     
-    user_doc = task_list_collection.find_one({"user_id": user_id})
+    user_doc = await task_list_collection.find_one({"user_id": user_id})
     
     if not user_doc or "tasks" not in user_doc:
         print(f"No tasks found for user {user_id}")
@@ -91,7 +91,7 @@ def get_tasks(user_id: str, status: str = None, priority: str = None) -> list:
     return tasks
 
 
-def update_task_status(task_id: str = None, task_title: str = None, status: str = None, user_id: str = None) -> dict:
+async def update_task_status(task_id: str = None, task_title: str = None, status: str = None, user_id: str = None) -> dict:
     """Update the status of a specific task by task_id or task_title"""
     print(f"Updating task status to {status} for user {user_id}")
     
@@ -105,7 +105,7 @@ def update_task_status(task_id: str = None, task_title: str = None, status: str 
         raise ValueError("Missing user_id in update_task_status() call!")
     
     # Find user document first
-    user_doc = task_list_collection.find_one({"user_id": user_id})
+    user_doc = await task_list_collection.find_one({"user_id": user_id})
     if not user_doc or "tasks" not in user_doc:
         print(f"No tasks found for user {user_id}")
         return None
@@ -132,7 +132,7 @@ def update_task_status(task_id: str = None, task_title: str = None, status: str 
     now = datetime.now(tz)
     
     # Update specific task in the array using array index
-    result = task_list_collection.update_one(
+    result = await task_list_collection.update_one(
         {"user_id": user_id},
         {
             "$set": {

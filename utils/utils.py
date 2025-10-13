@@ -348,7 +348,7 @@ async def get_dashboard_events(user_id: str):
         end_time = start_time + timedelta(days=6) - timedelta(seconds=1)
 
         # Fetch events matching this window
-        cursor = calendar_collection.find({
+        cursor = await calendar_collection.find({
             "user_id": user_id,
             "$or": [
                 {"start.dateTime": {"$gte": start_time.isoformat(), "$lte": end_time.isoformat()}},

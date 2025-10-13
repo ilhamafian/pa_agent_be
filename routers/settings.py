@@ -42,7 +42,7 @@ async def settings(user_id: str = Query(...)):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ObjectId format")
 
-    user = users_collection.find_one({"_id": oid})
+    user = await users_collection.find_one({"_id": oid})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -74,7 +74,7 @@ async def update_profile(data: UpdateProfilePayload):
         "language": data.language
     }
 
-    result = users_collection.update_one({"_id": oid}, {"$set": update_data})
+    result = await users_collection.update_one({"_id": oid}, {"$set": update_data})
 
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")

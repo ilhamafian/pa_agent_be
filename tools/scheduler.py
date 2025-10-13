@@ -104,7 +104,7 @@ async def get_events_for_user_on_date(user_id, target_date):
         end_time = tz.localize(datetime.combine(target_date, datetime.max.time()))
         
         # Query MongoDB for events within the date range
-        cursor = calendar_collection.find({
+        cursor = await calendar_collection.find({
             "user_id": user_id,
             "start_time": {"$gte": start_time, "$lte": end_time}
         }).sort("start_time", 1)  # Sort by start_time ascending
@@ -132,7 +132,7 @@ async def get_events_for_user_on_date(user_id, target_date):
         print(f"[ERROR] Failed to fetch events from MongoDB for user {user_id}: {e}")
         return [], False
 
-def format_event_reminder(events, date):
+async def format_event_reminder(events, date):
     if not events:
         return f"📅 You have no events on {date.strftime('%A, %B %d')}."
 
@@ -153,7 +153,7 @@ def format_event_reminder(events, date):
 
     return "\n".join(lines)
 
-def format_task_reminder(tasks):
+async def format_task_reminder(tasks):
     """Format pending and in-progress tasks for daily reminder"""
     if not tasks:
         return ""
@@ -222,7 +222,7 @@ def format_task_reminder(tasks):
 #     return "\n".join(lines)
 # ============ END GOOGLE CALENDAR TOKEN FUNCTIONS ============
 
-def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
+async def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     """Combine events and tasks into a comprehensive daily reminder"""
     lines = []
     
@@ -281,7 +281,7 @@ def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
     
     return "\n".join(lines)
 
-def start_scheduler():
+async def start_scheduler():
     async def today_reminder_job():
         try:
             print("\n[TODAY REMINDER JOB] Starting morning reminder job...")
@@ -316,8 +316,8 @@ def start_scheduler():
                 
                 # Fetch pending and in-progress tasks
                 try:
-                    pending_tasks = get_tasks(user_id, status="pending") or []
-                    in_progress_tasks = get_tasks(user_id, status="in_progress") or []
+                    pending_tasks = await get_tasks(user_id, status="pending") or []
+                    in_progress_tasks = await get_tasks(user_id, status="in_progress") or []
                     all_active_tasks = pending_tasks + in_progress_tasks
                     print(f"[TODAY REMINDER JOB] Found {len(all_active_tasks)} active tasks for user {user_id}")
                 except Exception as task_error:
@@ -356,7 +356,7 @@ def start_scheduler():
                 
                 # MongoDB: Send regular combined reminder if there are events or tasks
                 if events or all_active_tasks:
-                    message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=False)
+                    message = await format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=False)
                     print(f"[TODAY REMINDER JOB] Sending combined reminder to user {user_id}:")
                     if not TEST_MODE:
                         print(message)
@@ -418,8 +418,8 @@ def start_scheduler():
                 
                 # Fetch pending and in-progress tasks
                 try:
-                    pending_tasks = get_tasks(user_id, status="pending") or []
-                    in_progress_tasks = get_tasks(user_id, status="in_progress") or []
+                    pending_tasks = await get_tasks(user_id, status="pending") or []
+                    in_progress_tasks = await get_tasks(user_id, status="in_progress") or []
                     all_active_tasks = pending_tasks + in_progress_tasks
                     print(f"[TOMORROW REMINDER JOB] Found {len(all_active_tasks)} active tasks for user {user_id}")
                 except Exception as task_error:
@@ -465,7 +465,7 @@ def start_scheduler():
                 
                 # MongoDB: Send regular combined reminder if there are events or tasks
                 if events or all_active_tasks:
-                    message = format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=True)
+                    message = await format_combined_reminder(events, all_active_tasks, nickname, is_tomorrow=True)
                     print(f"[TOMORROW REMINDER JOB] Sending combined reminder to user {user_id}:")
                     if not TEST_MODE:
                         print(message)
@@ -517,13 +517,13 @@ def start_scheduler():
     # Reload all scheduled reminders from database
     print("\n🔄 Reloading scheduled reminders from database...")
     from tools.reminder import reload_reminders
-    reload_result = reload_reminders()
+    reload_result = await reload_reminders()
     if "error" not in reload_result:
         print(f"✅ Reminder reload complete: {reload_result['reloaded']} reloaded, {reload_result['skipped']} skipped")
     else:
         print(f"❌ Reminder reload failed: {reload_result['error']}")
 
-def trigger_today_reminder_manually():
+async def trigger_today_reminder_manually():
     """Manually trigger today's reminder for testing"""
     print("\n🔧 [MANUAL TRIGGER] Running today's reminder job manually...")
     # Get the inner function and call it directly
@@ -535,7 +535,7 @@ def trigger_today_reminder_manually():
     else:
         print("❌ Today reminder job not found in scheduler")
 
-def trigger_tomorrow_reminder_manually():
+async def trigger_tomorrow_reminder_manually():
     """Manually trigger tomorrow's reminder for testing"""
     print("\n🔧 [MANUAL TRIGGER] Running tomorrow's reminder job manually...")
     # Get the inner function and call it directly

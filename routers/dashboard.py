@@ -18,7 +18,7 @@ router = APIRouter()
 @router.get("/get_dashboard_info")
 async def dashboard(current_user: dict = Depends(get_current_user)):
     user_id = current_user["user_id"]
-    tasks_doc = tasks_collection.find_one({"user_id": user_id})
+    tasks_doc = await tasks_collection.find_one({"user_id": user_id})
 
     tasks_list = tasks_doc["tasks"] if tasks_doc and "tasks" in tasks_doc else []
     
@@ -33,7 +33,7 @@ async def dashboard(current_user: dict = Depends(get_current_user)):
 
 @router.post("/report_bug")
 async def report_bug(bug: BugPayload):
-    bugs_collection.insert_one({
+    await bugs_collection.insert_one({
         "user_id": bug.user_id,
         "title": bug.title,
         "description": bug.description,

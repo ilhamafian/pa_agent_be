@@ -60,7 +60,7 @@ async def get_all_users():
         print("[MONGO] Executing find({}) on users collection...")
         # Only fetch the fields we need: _id and phone_number
         projection = {"_id": 1, "phone_number": 1}
-        cursor = users_collection.find({}, projection, batch_size=100).max_time_ms(30000)  # 30 second timeout
+        cursor = await users_collection.find({}, projection, batch_size=100).max_time_ms(30000)  # 30 second timeout
         print("[MONGO] Using projection to fetch only _id and phone_number fields")
         
         print("[MONGO] Converting cursor to list...")
@@ -111,7 +111,7 @@ async def get_conversation_history(user_id: str) -> List[Dict]:
     """
     try:
         # Get from MongoDB
-        doc = conversation_history_collection.find_one({"user_id": user_id})
+        doc = await conversation_history_collection.find_one({"user_id": user_id})
         if doc and "messages" in doc:
             print(f"📥 Retrieved {len(doc['messages'])} messages from MongoDB for user {user_id}")
             return doc["messages"]
@@ -135,7 +135,7 @@ async def save_message_to_history(user_id: str, message: Dict) -> bool:
     """
     try:
         # Use $push with $slice to maintain message limit automatically
-        result = conversation_history_collection.update_one(
+        result = await conversation_history_collection.update_one(
             {"user_id": user_id},
             {
                 "$push": {
@@ -182,7 +182,7 @@ async def clear_conversation_history(user_id: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        result = conversation_history_collection.delete_one({"user_id": user_id})
+        result = await conversation_history_collection.delete_one({"user_id": user_id})
         if result.deleted_count > 0:
             print(f"🗑️ Cleared conversation history for user {user_id}")
             return True

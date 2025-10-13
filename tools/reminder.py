@@ -23,7 +23,7 @@ SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 class AuthRequiredError(Exception):
     pass
 
-def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=None, phone_number=None, event_date: str = None, event_time: str = None) -> dict:
+async def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=None, phone_number=None, event_date: str = None, event_time: str = None) -> dict:
     """
     Creates a reminder for an existing calendar event.
     
@@ -39,7 +39,7 @@ def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=No
         raise ValueError("Missing user_id in create_event_reminder() call!")
     
     # Check if user has authentication
-    token_data = oauth_tokens_collection.find_one({"user_id": user_id})
+    token_data = await oauth_tokens_collection.find_one({"user_id": user_id})
     if not token_data:
         raise AuthRequiredError("AUTH_REQUIRED")
     
@@ -101,7 +101,7 @@ def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=No
         "created_at": datetime.now(pytz.timezone("Asia/Kuala_Lumpur"))
     }
     
-    result = reminders_collection.insert_one(reminder_data)
+    result = await reminders_collection.insert_one(reminder_data)
     reminder_id = str(result.inserted_id)
     
     # Schedule the reminder
@@ -122,7 +122,7 @@ def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=No
         "reminder_time": reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')
     }
 
-def create_custom_reminder(message: str, remind_in: str, user_id=None, phone_number=None) -> dict:
+async def create_custom_reminder(message: str, remind_in: str, user_id=None, phone_number=None) -> dict:
     """
     Creates a custom reminder for a specific time.
     
@@ -283,7 +283,7 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None, phone_num
         "created_at": now
     }
     
-    result = reminders_collection.insert_one(reminder_data)
+    result = await reminders_collection.insert_one(reminder_data)
     reminder_id = str(result.inserted_id)
     
     # Schedule the reminder
@@ -315,14 +315,14 @@ def create_custom_reminder(message: str, remind_in: str, user_id=None, phone_num
         "reminder_time": reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')
     }
 
-def send_reminder(reminder_id: str):
+async def send_reminder(reminder_id: str):
     """
     Sends a reminder message to the user.
     This function is called by the scheduler when a reminder is due.
     """
     try:
         # Get reminder data
-        reminder = reminders_collection.find_one({"_id": ObjectId(reminder_id)})
+        reminder = await reminders_collection.find_one({"_id": ObjectId(reminder_id)})
         if not reminder:
             print(f"[REMINDER ERROR] Reminder {reminder_id} not found in database")
             return
@@ -341,7 +341,7 @@ def send_reminder(reminder_id: str):
             )
         
         # Mark reminder as sent
-        reminders_collection.update_one(
+        await reminders_collection.update_one(
             {"_id": ObjectId(reminder_id)},
             {"$set": {"status": "sent", "sent_at": datetime.now(pytz.timezone("Asia/Kuala_Lumpur"))}}
         )
@@ -351,12 +351,12 @@ def send_reminder(reminder_id: str):
     except Exception as e:
         print(f"[REMINDER ERROR] Failed to send reminder {reminder_id}: {e}")
         # Mark reminder as failed
-        reminders_collection.update_one(
+        await reminders_collection.update_one(
             {"_id": ObjectId(reminder_id)},
             {"$set": {"status": "failed", "error": str(e)}}
         )
 
-def reload_reminders():
+async def reload_reminders():
     """
     Reloads all scheduled reminders from MongoDB and re-schedules them.
     This function is called on server startup to restore reminders after a restart.
@@ -369,7 +369,7 @@ def reload_reminders():
         now = datetime.now(tz)
         
         # Find all scheduled reminders that haven't been sent yet
-        scheduled_reminders = list(reminders_collection.find({
+        scheduled_reminders = list(await reminders_collection.find({
             "status": "scheduled",
             "reminder_time": {"$exists": True}
         }))
@@ -398,7 +398,7 @@ def reload_reminders():
                     else:
                         print(f"[REMINDER RELOAD] Skipping past reminder {reminder_id} - was due at {reminder_time}")
                         # Mark as missed
-                        reminders_collection.update_one(
+                        await reminders_collection.update_one(
                             {"_id": reminder["_id"]},
                             {"$set": {"status": "missed", "missed_at": now}}
                         )
@@ -442,7 +442,7 @@ def reload_reminders():
         print(f"[REMINDER RELOAD ERROR] Failed to reload reminders: {e}")
         return {"error": str(e)}
 
-def list_reminders(user_id=None) -> dict:
+async def list_reminders(user_id=None) -> dict:
     """
     Lists all scheduled reminders for a user.
     """
@@ -452,7 +452,7 @@ def list_reminders(user_id=None) -> dict:
     now = datetime.now(pytz.timezone("Asia/Kuala_Lumpur"))
     
     # Get all active reminders for the user
-    reminders = list(reminders_collection.find({
+    reminders = list(await reminders_collection.find({
         "user_id": user_id,
         "status": "scheduled",
         "reminder_time": {"$gte": now}

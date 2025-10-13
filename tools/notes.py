@@ -19,7 +19,7 @@ openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 class AuthRequiredError(Exception):
     pass
 
-def create_note(user_id: str = None, content: str = None, title: str = None) -> dict:
+async def create_note(user_id: str = None, content: str = None, title: str = None) -> dict:
     if user_id is None:
         raise ValueError("Missing user_id in create_note() call!")
     
@@ -83,7 +83,7 @@ def create_note(user_id: str = None, content: str = None, title: str = None) -> 
     print("Note object:", {**note, 'embedding': f"[{len(embedding)} dimensions]"})  # Don't print full embedding
     
     # Insert note into MongoDB
-    result = notes_collection.insert_one(note)
+    result = await notes_collection.insert_one(note)
     
     print(f'Note created with ID: {result.inserted_id}')
     return {
@@ -96,7 +96,7 @@ def create_note(user_id: str = None, content: str = None, title: str = None) -> 
 # Global variable to store search results for retrieval
 _last_search_results = {}
 
-def search_notes(user_id: str = None, query: str = None, k: int = 3) -> list:
+async def search_notes(user_id: str = None, query: str = None, k: int = 3) -> list:
     """Search notes using vector similarity for a user."""
     
     if user_id is None:
@@ -111,11 +111,11 @@ def search_notes(user_id: str = None, query: str = None, k: int = 3) -> list:
     
     # First, let's check what notes exist for this user
     try:
-        total_notes = notes_collection.count_documents({"user_id": user_id})
+        total_notes = await notes_collection.count_documents({"user_id": user_id})
         print(f"Total notes for user {user_id}: {total_notes}")
         
         # Show a sample of existing notes for debugging
-        sample_notes = list(notes_collection.find(
+        sample_notes = list(await notes_collection.find(
             {"user_id": user_id},
             {"title": 1, "content": 1, "_id": 0}
         ).limit(3))
@@ -161,7 +161,7 @@ def search_notes(user_id: str = None, query: str = None, k: int = 3) -> list:
         ]
         
         print(f"Executing vector search pipeline: {pipeline}")
-        results = list(notes_collection.aggregate(pipeline))
+        results = list(await notes_collection.aggregate(pipeline))
         
         print(f"Vector search results: {len(results)} notes found")
         for i, result in enumerate(results):
@@ -188,7 +188,7 @@ def search_notes(user_id: str = None, query: str = None, k: int = 3) -> list:
         }
         print(f"Fallback query: {fallback_query}")
         
-        fallback_results = list(notes_collection.find(
+        fallback_results = list(await notes_collection.find(
             fallback_query,
             {
                 "_id": 0,
@@ -209,7 +209,7 @@ def search_notes(user_id: str = None, query: str = None, k: int = 3) -> list:
         
         return fallback_results
 
-def retrieve_note(user_id: str = None, selection: int = None) -> dict:
+async def retrieve_note(user_id: str = None, selection: int = None) -> dict:
     """Retrieve the full content of a note based on user's selection from search results."""
     
     if user_id is None:

@@ -132,7 +132,7 @@ async def receive_whatsapp(request: Request):
         # ✅ Step 1: Check if user exists in MongoDB
         hashed_sender = hash_data(sender)
         print(f"Hashed sender: {hashed_sender}")
-        user = users_collection.find_one({"hashed_phone_number": hashed_sender})
+        user = await users_collection.find_one({"hashed_phone_number": hashed_sender})
 
         if not user:
             print(f"👤 New user detected: {sender} — initiating onboarding.")
@@ -178,7 +178,7 @@ async def auth_callback(request: Request):
             status_code=303
         )
 
-    state_data = oauth_states_collection.find_one({"state": state})
+    state_data = await oauth_states_collection.find_one({"state": state})
     if not state_data:
         return RedirectResponse(
             url=f"{FRONTEND_URL}/auth-result?status=error&reason=invalid_state",
@@ -212,7 +212,7 @@ async def auth_callback(request: Request):
             status_code=303
         )
 
-    oauth_tokens_collection.update_one(
+    await oauth_tokens_collection.update_one(
         {"user_id": user_id},
         {"$set": {"token": {
             "token": credentials.token,
@@ -227,7 +227,7 @@ async def auth_callback(request: Request):
     )
 
     # Update integrations.google_calendar.enabled to True for this user
-    integrations_collection.update_one(
+    await integrations_collection.update_one(
         {"user_id": user_id},
         {"$set": {"integrations.google_calendar.enabled": True}},
         upsert=True

@@ -38,7 +38,7 @@ class AuthRequiredError(Exception):
     """Legacy exception for Google Calendar auth - kept for compatibility"""
     pass
 
-def create_event(time: str = None, end_time: str = None, date: str = None, title: str = None, user_id=None, description: str = None) -> dict:
+async def create_event(time: str = None, end_time: str = None, date: str = None, title: str = None, user_id=None, description: str = None) -> dict:
     """Create a calendar event in MongoDB"""
     
     # ============ GOOGLE CALENDAR CODE - COMMENTED OUT ============
@@ -195,14 +195,14 @@ def create_event(time: str = None, end_time: str = None, date: str = None, title
         }
     
     print("Creating event:", event)
-    result = calendar_collection.insert_one(event)
+    result = await calendar_collection.insert_one(event)
     event['_id'] = str(result.inserted_id)
     event['id'] = str(result.inserted_id)  # For compatibility
     
     print(f"✅ Event created: {event['summary']}")
     return event
 
-def update_event(user_id=None, original_title=None, new_title=None, new_date=None, new_start_time=None, new_end_time=None, new_description=None):
+async def update_event(user_id=None, original_title=None, new_title=None, new_date=None, new_start_time=None, new_end_time=None, new_description=None):
     """
     Update an existing calendar event by searching it with original_title (and optionally date).
     You can update title, date, time, and description.
@@ -314,7 +314,7 @@ def update_event(user_id=None, original_title=None, new_title=None, new_date=Non
         raise ValueError("user_id and original_title are required")
     
     # Find the event using case-insensitive search
-    event = calendar_collection.find_one({
+    event = await calendar_collection.find_one({
         "user_id": user_id,
         "summary": {"$regex": f"^{original_title}$", "$options": "i"}
     })
@@ -352,13 +352,13 @@ def update_event(user_id=None, original_title=None, new_title=None, new_date=Non
         update_data['is_all_day'] = True
     
     # Perform update
-    calendar_collection.update_one(
+    await calendar_collection.update_one(
         {"_id": event["_id"]},
         {"$set": update_data}
     )
     
     # Fetch updated event
-    updated_event = calendar_collection.find_one({"_id": event["_id"]})
+    updated_event = await calendar_collection.find_one({"_id": event["_id"]})
     
     # Format response
     def format_datetime(dt):
@@ -382,7 +382,7 @@ def update_event(user_id=None, original_title=None, new_title=None, new_date=Non
     )
 
 
-def get_events(natural_range="today", user_id=None): 
+async def get_events(natural_range="today", user_id=None): 
     """Fetch calendar events from MongoDB using natural language time range"""
     print("Entered get_events")
     print(f"[DEBUG] natural_range input: {natural_range}")
@@ -498,7 +498,7 @@ def get_events(natural_range="today", user_id=None):
 
     # Fetch events from MongoDB
     print(f"[DEBUG] Fetching events from {start_time.isoformat()} to {end_time.isoformat()}")
-    events = list(calendar_collection.find({
+    events = list(await calendar_collection.find({
         "user_id": user_id,
         "start_time": {"$gte": start_time, "$lte": end_time}
     }).sort("start_time", 1))  # Sort by start_time ascending
@@ -534,13 +534,13 @@ def get_events(natural_range="today", user_id=None):
     return "\n".join(reply_lines)
 
 
-def delete_event(user_id=None, title=None):
+async def delete_event(user_id=None, title=None):
     """Delete a calendar event from MongoDB"""
     if user_id is None or title is None:
         raise ValueError("user_id and title are required")
     
     # Find and delete the event
-    result = calendar_collection.delete_one({
+    result = await calendar_collection.delete_one({
         "user_id": user_id,
         "summary": {"$regex": f"^{title}$", "$options": "i"}
     })

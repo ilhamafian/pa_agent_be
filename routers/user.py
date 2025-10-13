@@ -68,9 +68,9 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def _check_phone_number_exists(hashed_phone: str) -> bool:
+async def _check_phone_number_exists(hashed_phone: str) -> bool:
     """Utility function to check if a hashed phone number exists in the database"""
-    user = users_collection.find_one({"hashed_phone_number": hashed_phone})
+    user = await users_collection.find_one({"hashed_phone_number": hashed_phone})
     return bool(user)
 
 async def send_onboarding_guide(phone_number: int):
@@ -90,7 +90,7 @@ async def create_user(data: UserPayload):
         hashed_phone = hash_data(str(data.phone_number))
 
         # Check if user already exists (by hashed phone number)
-        if _check_phone_number_exists(hashed_phone):  # pass hashed here!
+        if await _check_phone_number_exists(hashed_phone):  # pass hashed here!
             raise HTTPException(status_code=400, detail="User with this phone number already exists")
 
         # Get current timestamp
@@ -116,7 +116,7 @@ async def create_user(data: UserPayload):
         }
 
         # Insert user into MongoDB
-        result = users_collection.insert_one(user_doc)
+        result = await users_collection.insert_one(user_doc)
         user_id_str = str(result.inserted_id)
 
         token = create_access_token(data={"user_id": user_id_str})
@@ -144,7 +144,7 @@ async def login_user(data: UserLoginPayload):
         print(f"Hashed phone: {hashed_phone}")
         
         # Find user by hashed phone number
-        user = users_collection.find_one({"hashed_phone_number": hashed_phone})
+        user = await users_collection.find_one({"hashed_phone_number": hashed_phone})
         
         if not user:
             print(f"User not found: {data.phone_number}")
@@ -159,7 +159,7 @@ async def login_user(data: UserLoginPayload):
         tz = pytz.timezone("Asia/Kuala_Lumpur")
         now = datetime.now(tz)
         
-        users_collection.update_one(
+        await users_collection.update_one(
             {"_id": user["_id"]},
             {"$set": {"last_login": now, "updated_at": now}}
         )
@@ -193,7 +193,7 @@ async def check_phone_number_exist(data: dict):
             raise HTTPException(status_code=400, detail="Invalid phone number")
 
         hashed_phone = hash_data(str(phone_number))
-        user = users_collection.find_one({"hashed_phone_number": hashed_phone})
+        user = await users_collection.find_one({"hashed_phone_number": hashed_phone})
 
         return {"exists": bool(user)}
 
@@ -213,7 +213,7 @@ async def logout(data: LogoutPayload):
     try:
         hashed_phone = hash_data(data.phone_number)
         
-        result = users_collection.update_one(
+        result = await users_collection.update_one(
             {"hashed_phone_number": hashed_phone},
             {"$set": {"last_login": None}}
         )
@@ -235,7 +235,7 @@ async def waitlist(req: WaitlistPayload):
     print(f"Adding to waitlist: {phone_number}")
 
     try:
-        waitlist_collection.insert_one({"phone_number": phone_number})
+        await waitlist_collection.insert_one({"phone_number": phone_number})
         return {
             "message": "✅ Added to waitlist successfully",
             "phone_number": phone_number
@@ -247,24 +247,24 @@ async def waitlist(req: WaitlistPayload):
 @router.post("/change_pin")
 async def change_pin(data: ChangePinRequest):
     print(f"Change PIN request for user_id: {data.user_id}")
-    user = users_collection.find_one({"_id": ObjectId(data.user_id)})
+    user = await users_collection.find_one({"_id": ObjectId(data.user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user["PIN"] != hash_data(str(data.current_pin)):
         raise HTTPException(status_code=400, detail="Invalid old PIN")
-    users_collection.update_one({"_id": ObjectId(data.user_id)}, {"$set": {"PIN": hash_data(str(data.new_pin))}})
+    await users_collection.update_one({"_id": ObjectId(data.user_id)}, {"$set": {"PIN": hash_data(str(data.new_pin))}})
     return {"message": "✅ PIN changed successfully"}
     
 @router.post("/forgot_pin")
 async def forgot_pin(data: ForgotPinRequest):
     print(f"Forgot PIN request for phone: {data.phone_number}")
     hashed_phone = hash_data(data.phone_number)
-    user = users_collection.find_one({"hashed_phone_number": hashed_phone})
+    user = await users_collection.find_one({"hashed_phone_number": hashed_phone})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
     pin = random.randint(100000, 999999)  # ensures always 6 digits
     print(f"New PIN: {pin}")
-    users_collection.update_one({"hashed_phone_number": hashed_phone}, {"$set": {"PIN": hash_data(str(pin))}})
+    await users_collection.update_one({"hashed_phone_number": hashed_phone}, {"$set": {"PIN": hash_data(str(pin))}})
     await send_whatsapp_message(data.phone_number, "Your New Temporary PIN is: " + str(pin) + ". Please change this PIN once you login to your account.")
     return {"message": "✅ PIN sent to phone number"}
