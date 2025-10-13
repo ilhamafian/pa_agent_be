@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-from db.mongo import get_conversation_history, save_message_to_history
+from db.mongo import get_conversation_history, save_message_to_history, conversation_history_collection
 from cachetools import TTLCache
 import asyncio
 
@@ -55,12 +55,16 @@ load_dotenv(dotenv_path=".env.local", override=True)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 APP_URL = os.getenv("APP_URL")
 
-# Conversation history cache - caches for 5 minutes with max 5000 users
-conversation_cache = TTLCache(maxsize=5000, ttl=300)  # 5 minutes TTL
+# Conversation history cache - configurable via environment variables
+CONVERSATION_CACHE_SIZE = int(os.getenv("CONVERSATION_CACHE_SIZE", "5000"))
+CONVERSATION_CACHE_TTL = int(os.getenv("CONVERSATION_CACHE_TTL", "300"))  # 5 minutes default
+USER_LOCKS_CACHE_SIZE = int(os.getenv("USER_LOCKS_CACHE_SIZE", "10000"))
+USER_LOCKS_CACHE_TTL = int(os.getenv("USER_LOCKS_CACHE_TTL", "600"))  # 10 minutes default
 
-# Async locks for thread-safe cache operations
-# One lock per user to prevent cache stampede
-user_locks = TTLCache(maxsize=10000, ttl=600)  # 10 minutes TTL for locks
+conversation_cache = TTLCache(maxsize=CONVERSATION_CACHE_SIZE, ttl=CONVERSATION_CACHE_TTL)
+user_locks = TTLCache(maxsize=USER_LOCKS_CACHE_SIZE, ttl=USER_LOCKS_CACHE_TTL)
+
+print(f"🔧 Cache initialized: Conversation cache (size={CONVERSATION_CACHE_SIZE}, ttl={CONVERSATION_CACHE_TTL}s), User locks (size={USER_LOCKS_CACHE_SIZE}, ttl={USER_LOCKS_CACHE_TTL}s)")
 cache_lock = asyncio.Lock()  # Global lock for lock management
 
 async def get_cached_conversation_history(user_id: str) -> List[Dict]:
@@ -133,20 +137,115 @@ def get_cache_stats() -> Dict:
     Get cache statistics for monitoring.
 
     Returns:
-        Dictionary with cache statistics
+        Dictionary with cache statistics including configuration
     """
     return {
         "conversation_cache": {
             "maxsize": conversation_cache.maxsize,
             "currsize": conversation_cache.currsize,
             "ttl": conversation_cache.ttl,
+            "hit_rate": "N/A (tracking not implemented)",  # Future enhancement
         },
         "user_locks": {
             "maxsize": user_locks.maxsize,
             "currsize": user_locks.currsize,
             "ttl": user_locks.ttl,
+        },
+        "configuration": {
+            "conversation_cache_size": CONVERSATION_CACHE_SIZE,
+            "conversation_cache_ttl_seconds": CONVERSATION_CACHE_TTL,
+            "user_locks_cache_size": USER_LOCKS_CACHE_SIZE,
+            "user_locks_cache_ttl_seconds": USER_LOCKS_CACHE_TTL,
+        },
+        "memory_usage": {
+            "conversation_cache_entries": conversation_cache.currsize,
+            "user_locks_entries": user_locks.currsize,
+            "estimated_memory_mb": "N/A (calculated on demand)",  # Future enhancement
         }
     }
+
+async def warm_cache_for_active_users(limit: int = 100) -> Dict:
+    """
+    Proactively warm the cache with conversation history for recently active users.
+    This improves performance by pre-loading frequently accessed data.
+
+    Args:
+        limit: Maximum number of active users to warm cache for
+
+    Returns:
+        Dictionary with warming statistics
+    """
+    try:
+        print(f"🔥 Starting cache warming for top {limit} active users...")
+
+        # Find users with recent conversation activity, sorted by most recent
+        pipeline = [
+            {"$match": {"messages": {"$exists": True, "$ne": []}}},
+            {"$addFields": {"last_message_time": {"$max": "$messages.created_at"}}},
+            {"$sort": {"last_message_time": -1}},
+            {"$limit": limit}
+        ]
+
+        cursor = conversation_history_collection.aggregate(pipeline)
+        active_users = await cursor.to_list(length=None)
+
+        warmed_count = 0
+        errors = []
+
+        for user_doc in active_users:
+            user_id = user_doc["user_id"]
+            try:
+                # Check if already in cache to avoid unnecessary work
+                if user_id not in conversation_cache:
+                    # Load conversation history into cache
+                    history = user_doc.get("messages", [])
+                    conversation_cache[user_id] = history
+                    warmed_count += 1
+                    print(f"🔥 Warmed cache for user {user_id} ({len(history)} messages)")
+                else:
+                    print(f"⏭️ User {user_id} already in cache, skipping")
+            except Exception as e:
+                error_msg = f"Error warming cache for user {user_id}: {e}"
+                print(f"❌ {error_msg}")
+                errors.append(error_msg)
+
+        print(f"✅ Cache warming completed: {warmed_count}/{len(active_users)} users warmed")
+
+        return {
+            "warmed_users": warmed_count,
+            "total_active_users": len(active_users),
+            "errors": errors,
+            "cache_size_after_warming": conversation_cache.currsize
+        }
+
+    except Exception as e:
+        error_msg = f"Cache warming failed: {e}"
+        print(f"❌ {error_msg}")
+        return {
+            "warmed_users": 0,
+            "total_active_users": 0,
+            "errors": [error_msg],
+            "cache_size_after_warming": conversation_cache.currsize
+        }
+
+async def schedule_cache_warming(interval_minutes: int = 15) -> None:
+    """
+    Schedule periodic cache warming for active users.
+    This runs in the background to maintain cache performance.
+
+    Args:
+        interval_minutes: How often to run cache warming (in minutes)
+    """
+    while True:
+        try:
+            await asyncio.sleep(interval_minutes * 60)  # Convert to seconds
+            await warm_cache_for_active_users()
+        except asyncio.CancelledError:
+            print("🔥 Cache warming scheduler cancelled")
+            break
+        except Exception as e:
+            print(f"❌ Error in cache warming scheduler: {e}")
+            # Continue running even if there's an error
 
 tools = [
     create_event_tool,

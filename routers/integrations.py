@@ -13,7 +13,7 @@ integrations_collection = db["integrations"]
 
 @router.get("/get_integrations")
 async def get_integrations(user_id: str = Query(...)):
-    integrations = integrations_collection.find_one({"user_id": user_id})
+    integrations = await integrations_collection.find_one({"user_id": user_id})
     if not integrations:
         raise HTTPException(status_code=404, detail="Integrations not found")
     

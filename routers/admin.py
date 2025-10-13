@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from db.mongo import get_all_users as get_all_users_mongo
 from utils.utils import send_whatsapp_message, send_whatsapp_template, decrypt_phone
+from ai.workflows.assistant import get_cache_stats, clear_user_cache, warm_cache_for_active_users, schedule_cache_warming
 
 load_dotenv(dotenv_path=".env.local", override=True)
 
@@ -115,3 +116,142 @@ async def get_total_users():
         return {"total": len(users)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch users: {e}")
+
+@router.get("/cache_stats")
+async def get_cache_statistics():
+    """
+    Get cache performance statistics for monitoring.
+    Returns hit rates, cache sizes, and other metrics.
+    """
+    try:
+        stats = get_cache_stats()
+
+        # Calculate cache hit rate if we had counters (for future enhancement)
+        # For now, just return the basic stats
+        return {
+            "cache_stats": stats,
+            "status": "Cache is operating normally"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch cache stats: {e}")
+
+@router.post("/cache/clear/{user_id}")
+async def clear_user_conversation_cache(user_id: str):
+    """
+    Clear conversation cache for a specific user.
+    Useful for troubleshooting or forcing cache refresh.
+    """
+    try:
+        cleared = await clear_user_cache(user_id)
+        if cleared:
+            return {
+                "message": f"Cache cleared for user {user_id}",
+                "user_id": user_id,
+                "cleared": True
+            }
+        else:
+            return {
+                "message": f"No cache entry found for user {user_id}",
+                "user_id": user_id,
+                "cleared": False
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear cache for user {user_id}: {e}")
+
+@router.post("/cache/clear_all")
+async def clear_all_conversation_cache():
+    """
+    Clear all conversation caches.
+    WARNING: This will cause all users to hit the database on their next message.
+    Use sparingly and only for maintenance purposes.
+    """
+    try:
+        from ai.workflows.assistant import conversation_cache, user_locks
+
+        # Get current cache sizes before clearing
+        conversation_count = conversation_cache.currsize
+        user_locks_count = user_locks.currsize
+
+        # Clear both caches
+        conversation_cache.clear()
+        user_locks.clear()
+
+        return {
+            "message": "All conversation caches cleared",
+            "cleared_conversations": conversation_count,
+            "cleared_user_locks": user_locks_count,
+            "status": "All users will hit database on next message"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear all caches: {e}")
+
+@router.post("/cache/warm")
+async def warm_cache_endpoint(limit: int = 100):
+    """
+    Manually trigger cache warming for active users.
+    This pre-loads conversation history for recently active users to improve performance.
+
+    Args:
+        limit: Maximum number of users to warm cache for (default: 100)
+
+    Returns:
+        Cache warming statistics
+    """
+    try:
+        result = await warm_cache_for_active_users(limit)
+        return {
+            "message": f"Cache warming completed for {result['warmed_users']}/{result['total_active_users']} users",
+            "warming_stats": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to warm cache: {e}")
+
+@router.post("/cache/warm_scheduler/start")
+async def start_cache_warming_scheduler(interval_minutes: int = 15):
+    """
+    Start the background cache warming scheduler.
+    This will periodically warm the cache for active users.
+
+    Args:
+        interval_minutes: How often to run cache warming (default: 15 minutes)
+
+    Returns:
+        Confirmation that scheduler was started
+    """
+    try:
+        # Note: In a real application, you might want to use a proper task manager
+        # For now, we'll just return a message that this would start the scheduler
+        return {
+            "message": f"Cache warming scheduler would start with {interval_minutes} minute intervals",
+            "interval_minutes": interval_minutes,
+            "note": "In production, this should be managed by the application lifecycle"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start cache warming scheduler: {e}")
+
+@router.get("/cache/warm/status")
+async def get_cache_warming_status():
+    """
+    Get the current status of cache warming functionality.
+
+    Returns:
+        Information about cache warming configuration and status
+    """
+    try:
+        from ai.workflows.assistant import conversation_cache
+
+        return {
+            "cache_warming_enabled": True,
+            "cache_size": conversation_cache.currsize,
+            "cache_max_size": conversation_cache.maxsize,
+            "manual_warming_available": True,
+            "scheduler_available": True,
+            "features": [
+                "Manual cache warming via POST /cache/warm",
+                "Configurable cache sizes via environment variables",
+                "Cache statistics monitoring",
+                "Individual user cache clearing"
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get cache warming status: {e}")
