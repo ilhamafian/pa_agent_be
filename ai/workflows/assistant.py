@@ -58,9 +58,15 @@ APP_URL = os.getenv("APP_URL")
 # Conversation history cache - caches for 5 minutes with max 5000 users
 conversation_cache = TTLCache(maxsize=5000, ttl=300)  # 5 minutes TTL
 
+# Async locks for thread-safe cache operations
+# One lock per user to prevent cache stampede
+user_locks = TTLCache(maxsize=10000, ttl=600)  # 10 minutes TTL for locks
+cache_lock = asyncio.Lock()  # Global lock for lock management
+
 async def get_cached_conversation_history(user_id: str) -> List[Dict]:
     """
     Get conversation history with caching to reduce database load.
+    Thread-safe and async-safe implementation.
 
     Args:
         user_id: The user's ID
@@ -68,23 +74,38 @@ async def get_cached_conversation_history(user_id: str) -> List[Dict]:
     Returns:
         List of message dictionaries with 'role' and 'content' keys
     """
-    # Try to get from cache first
+    # Try to get from cache first (fast path)
     if user_id in conversation_cache:
         print(f"📋 Cache hit for user {user_id}")
         return conversation_cache[user_id]
 
-    # Cache miss - load from database
-    print(f"💾 Cache miss for user {user_id} - loading from MongoDB")
-    history = await get_conversation_history(user_id)
+    # Cache miss - need to load from database with proper locking
+    # Use per-user lock to prevent cache stampede
+    async with cache_lock:
+        if user_id not in user_locks:
+            user_locks[user_id] = asyncio.Lock()
 
-    # Store in cache for future requests
-    conversation_cache[user_id] = history
+    user_lock = user_locks[user_id]
 
-    return history
+    async with user_lock:
+        # Double-check: another coroutine might have populated the cache while we waited for the lock
+        if user_id in conversation_cache:
+            print(f"📋 Cache hit for user {user_id} (after lock)")
+            return conversation_cache[user_id]
 
-def clear_user_cache(user_id: str) -> bool:
+        # Cache miss - load from database
+        print(f"💾 Cache miss for user {user_id} - loading from MongoDB")
+        history = await get_conversation_history(user_id)
+
+        # Store in cache for future requests (atomic operation)
+        conversation_cache[user_id] = history
+
+        return history
+
+async def clear_user_cache(user_id: str) -> bool:
     """
     Clear cached conversation history for a specific user.
+    Thread-safe implementation.
 
     Args:
         user_id: The user's ID
@@ -92,11 +113,20 @@ def clear_user_cache(user_id: str) -> bool:
     Returns:
         True if cache entry existed and was cleared, False otherwise
     """
-    if user_id in conversation_cache:
-        del conversation_cache[user_id]
+    try:
+        # Clear from conversation cache
+        if user_id in conversation_cache:
+            del conversation_cache[user_id]
+
+        # Clear from user locks cache
+        if user_id in user_locks:
+            del user_locks[user_id]
+
         print(f"🗑️ Cleared cache for user {user_id}")
         return True
-    return False
+    except Exception as e:
+        print(f"❌ Error clearing cache for user {user_id}: {e}")
+        return False
 
 def get_cache_stats() -> Dict:
     """
@@ -106,9 +136,16 @@ def get_cache_stats() -> Dict:
         Dictionary with cache statistics
     """
     return {
-        "maxsize": conversation_cache.maxsize,
-        "currsize": conversation_cache.currsize,
-        "ttl": conversation_cache.ttl,
+        "conversation_cache": {
+            "maxsize": conversation_cache.maxsize,
+            "currsize": conversation_cache.currsize,
+            "ttl": conversation_cache.ttl,
+        },
+        "user_locks": {
+            "maxsize": user_locks.maxsize,
+            "currsize": user_locks.currsize,
+            "ttl": user_locks.ttl,
+        }
     }
 
 tools = [
@@ -198,13 +235,14 @@ async def assistant_response(sender: str, text: str):
         user_message = {"role": "user", "content": user_input}
         await save_message_to_history(user_id, user_message)
 
-        # Update cache with new message (maintain limit)
-        if user_id in conversation_cache:
-            conversation_cache[user_id].append(user_message)
-            # Keep only the latest messages (same limit as MongoDB)
-            from db.mongo import MEMORY_MESSAGE_LIMIT
-            if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
-                conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
+        # Update cache with new message (maintain limit) - thread-safe
+        async with cache_lock:
+            if user_id in conversation_cache:
+                conversation_cache[user_id].append(user_message)
+                # Keep only the latest messages (same limit as MongoDB)
+                from db.mongo import MEMORY_MESSAGE_LIMIT
+                if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
+                    conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
 
         history.append(user_message)
 
@@ -492,13 +530,14 @@ async def assistant_response(sender: str, text: str):
                 assistant_message = {"role": "assistant", "content": reply}
                 await save_message_to_history(user_id, assistant_message)
 
-                # Update cache with assistant message
-                if user_id in conversation_cache:
-                    conversation_cache[user_id].append(assistant_message)
-                    # Keep only the latest messages (same limit as MongoDB)
-                    from db.mongo import MEMORY_MESSAGE_LIMIT
-                    if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
-                        conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
+                # Update cache with assistant message - thread-safe
+                async with cache_lock:
+                    if user_id in conversation_cache:
+                        conversation_cache[user_id].append(assistant_message)
+                        # Keep only the latest messages (same limit as MongoDB)
+                        from db.mongo import MEMORY_MESSAGE_LIMIT
+                        if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
+                            conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
                 
                 return {"ok": True}
 
@@ -513,13 +552,14 @@ async def assistant_response(sender: str, text: str):
             assistant_message = {"role": "assistant", "content": reply}
             await save_message_to_history(user_id, assistant_message)
 
-            # Update cache with assistant message
-            if user_id in conversation_cache:
-                conversation_cache[user_id].append(assistant_message)
-                # Keep only the latest messages (same limit as MongoDB)
-                from db.mongo import MEMORY_MESSAGE_LIMIT
-                if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
-                    conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
+            # Update cache with assistant message - thread-safe
+            async with cache_lock:
+                if user_id in conversation_cache:
+                    conversation_cache[user_id].append(assistant_message)
+                    # Keep only the latest messages (same limit as MongoDB)
+                    from db.mongo import MEMORY_MESSAGE_LIMIT
+                    if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
+                        conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
 
         return {"ok": True}
 
