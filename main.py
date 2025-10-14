@@ -112,10 +112,10 @@ async def verify_webhook(request: Request):
         return PlainTextResponse(content=params.get("hub.challenge"), status_code=200)
     return PlainTextResponse("Verification failed", status_code=403)
 
-@app.post("/admin_chat")
+@app.post("/playground")
 async def admin_chat(request: Request):
     data = await request.json()
-    sender = 601234567890
+    sender = "601234567890"
     text = data["message"]
     print(f"Admin chat data: {data}")
     return await assistant_response(sender, text)
