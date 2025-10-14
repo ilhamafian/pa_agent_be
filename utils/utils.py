@@ -49,7 +49,7 @@ def decrypt_phone(encrypted_number: str) -> str:
 
 async def send_whatsapp_message(recipient_id: str, message: str):
     
-    url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
+    url = f"https://graph.facebook.com/v23.0/{PHONE_NUMBER_ID}/messages"
     
     current_token = WHATSAPP_TOKEN
     

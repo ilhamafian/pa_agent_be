@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
 
     # === Shutdown ===
     print("🛑 Shutting down FastAPI app...")
-    client.close()
+    await client.close()
     print("✅ MongoDB connection closed")
 
 # ✅ Now create app with lifespan handler
@@ -94,7 +94,7 @@ async def log_requests(request: Request, call_next):
 executor = ThreadPoolExecutor()
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
-print("🚀 FastAPI app started in Test Staging!")
+print("🚀 FastAPI app started!")
 print(f"DB_NAME: {db_name}")
 
 # === Routes ===
