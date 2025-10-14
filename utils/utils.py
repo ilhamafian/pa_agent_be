@@ -67,37 +67,40 @@ async def send_whatsapp_message(recipient_id: str, message: str):
         "type": "text",
         "text": {"body": message}
     }
-    
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=data, headers=headers)
-            
-            response_text = response.text
-            
-            response_json = None
-            try:
-                response_json = response.json()
+
+    if recipient_id == "601234567890":
+        print(f"[WHATSAPP_MESSAGE] Sending to admin: {message}")
+    else: 
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=data, headers=headers)
                 
-            except Exception as json_error:
+                response_text = response.text
+                
                 response_json = None
-            
-            if response.status_code == 401:
-                return {"status": "error", "status_code": 401, "response_text": response_text[:500], "response_json": response_json}
-            
-            # Return a result object for the scheduler
-            if response.status_code == 200:
-                result = {
-                    "status": "success", 
-                    "status_code": response.status_code, 
-                    "response_json": response_json,
-                    "message_id": response_json.get("messages", [{}])[0].get("id") if response_json else None
-                }
-                return result
-            else:
-                result = {"status": "error", "status_code": response.status_code, "response_text": response_text[:500], "response_json": response_json}
-                return result
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+                try:
+                    response_json = response.json()
+                    
+                except Exception as json_error:
+                    response_json = None
+                
+                if response.status_code == 401:
+                    return {"status": "error", "status_code": 401, "response_text": response_text[:500], "response_json": response_json}
+                
+                # Return a result object for the scheduler
+                if response.status_code == 200:
+                    result = {
+                        "status": "success", 
+                        "status_code": response.status_code, 
+                        "response_json": response_json,
+                        "message_id": response_json.get("messages", [{}])[0].get("id") if response_json else None
+                    }
+                    return result
+                else:
+                    result = {"status": "error", "status_code": response.status_code, "response_text": response_text[:500], "response_json": response_json}
+                    return result
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
 
 async def send_whatsapp_template(recipient_id: str, template_name: str, language_code: str = "en"):
     """
