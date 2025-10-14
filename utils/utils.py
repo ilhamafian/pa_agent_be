@@ -70,6 +70,7 @@ async def send_whatsapp_message(recipient_id: str, message: str):
 
     if recipient_id == "601234567890":
         print(f"[WHATSAPP_MESSAGE] Sending to admin: {message}")
+        return {"status": "success", "message": message}
     else: 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:

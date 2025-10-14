@@ -118,7 +118,7 @@ async def admin_chat(request: Request):
     sender = "601234567890"
     text = data["message"]
     print(f"Admin chat data: {data}")
-    return await assistant_response(sender, text)
+    return await assistant_response(sender, text, True)
 
 @app.post("/auth/callback")
 async def receive_whatsapp(request: Request):

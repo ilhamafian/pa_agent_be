@@ -288,7 +288,7 @@ redirect_uri = f"{APP_URL}/auth/google_callback"
 with open("ai/prompts/system_prompt.txt", "r", encoding="utf-8") as f:
     system_prompt_template = f.read()
 
-async def assistant_response(sender: str, text: str):
+async def assistant_response(sender: str, text: str, playground_mode: bool = False):
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     try:
@@ -623,7 +623,9 @@ async def assistant_response(sender: str, text: str):
                     )
 
                 safe_reply = clean_unicode(reply)
-                await send_whatsapp_message(phone_number, safe_reply)
+                
+                if not playground_mode:
+                    await send_whatsapp_message(phone_number, safe_reply)
                 
                 # Save assistant message to history
                 assistant_message = {"role": "assistant", "content": reply}
@@ -638,6 +640,8 @@ async def assistant_response(sender: str, text: str):
                         if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
                             conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
                 
+                if playground_mode:
+                    return {"ok": True, "message": safe_reply}
                 return {"ok": True}
 
         # If no tool calls, send the assistant's text output
@@ -645,7 +649,9 @@ async def assistant_response(sender: str, text: str):
         if output_text:
             reply = output_text.strip()
             safe_reply = clean_unicode(reply)
-            await send_whatsapp_message(phone_number, safe_reply)
+            
+            if not playground_mode:
+                await send_whatsapp_message(phone_number, safe_reply)
             
             # Save assistant message to history
             assistant_message = {"role": "assistant", "content": reply}
@@ -659,6 +665,9 @@ async def assistant_response(sender: str, text: str):
                     from db.mongo import MEMORY_MESSAGE_LIMIT
                     if len(conversation_cache[user_id]) > MEMORY_MESSAGE_LIMIT:
                         conversation_cache[user_id] = conversation_cache[user_id][-MEMORY_MESSAGE_LIMIT:]
+
+            if playground_mode:
+                return {"ok": True, "message": safe_reply}
 
         return {"ok": True}
 
