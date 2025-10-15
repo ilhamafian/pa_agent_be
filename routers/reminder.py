@@ -55,7 +55,7 @@ async def today_reminder_user_handler(request: Request):
         users_collection = db["users"]
         
         # Fetch user data
-        user = await users_collection.find_one({"user_id": user_id})
+        user = await users_collection.find_one({"_id": ObjectId(user_id)})
         if not user:
             print(f"[TODAY USER REMINDER] User {user_id} not found")
             return {"status": "error", "message": "User not found"}
@@ -166,7 +166,7 @@ async def tomorrow_reminder_user_handler(request: Request):
         users_collection = db["users"]
         
         # Fetch user data
-        user = await users_collection.find_one({"user_id": user_id})
+        user = await users_collection.find_one({"_id": ObjectId(user_id)})
         if not user:
             print(f"[TOMORROW USER REMINDER] User {user_id} not found")
             return {"status": "error", "message": "User not found"}

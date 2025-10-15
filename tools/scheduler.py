@@ -222,7 +222,7 @@ async def start_scheduler():
                     endpoint_url=tomorrow_url,
                     task_name=f"tomorrow-reminder-{user_id}",
                     hour=22,
-                    minute=30,
+                    minute=40,
                     timezone_str="Asia/Kuala_Lumpur",
                     request_body={"user_id": user_id}
                 )
