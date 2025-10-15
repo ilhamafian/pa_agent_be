@@ -246,7 +246,7 @@ async def tomorrow_reminder_user_handler(request: Request):
             await schedule_daily_task(
                 endpoint_url=tomorrow_url,
                 task_name=f"tomorrow-reminder-{user_id}",
-                hour=21,
+                hour=19,
                 minute=30,
                 timezone_str="Asia/Kuala_Lumpur",
                 request_body={"user_id": user_id}

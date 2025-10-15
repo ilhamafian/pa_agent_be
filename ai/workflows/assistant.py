@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import json
 from typing import List, Dict
 from zoneinfo import ZoneInfo
-from openai import OpenAI
+from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
 from db.mongo import get_conversation_history, save_message_to_history, conversation_history_collection
@@ -286,7 +286,7 @@ with open("ai/prompts/system_prompt.txt", "r", encoding="utf-8") as f:
     system_prompt_template = f.read()
 
 async def assistant_response(sender: str, text: str, playground_mode: bool = False):
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
     try:
         phone_number = sender
@@ -345,7 +345,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
         # Prepare chat messages with system prompt + recent history (last 10 messages)
         chat_messages = [{"role": "system", "content": system_prompt}] + history[-10:]
 
-        response = client.responses.create(
+        response = await client.responses.create(
             model="gpt-4o-mini",
             input=chat_messages,
             tools=_flatten_response_tools(tools),

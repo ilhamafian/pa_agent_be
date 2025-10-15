@@ -120,6 +120,41 @@ async def admin_chat(request: Request):
     print(f"Admin chat data: {data}")
     return await assistant_response(sender, text, True)
 
+@app.post("/worker/process-message")
+async def process_message_worker(request: Request):
+    """
+    Worker endpoint for processing queued WhatsApp messages.
+    Called by Cloud Tasks asynchronously.
+    """
+    try:
+        data = await request.json()
+        sender = data.get("sender")
+        text = data.get("text")
+        message_id = data.get("message_id")
+        timestamp = data.get("timestamp")
+        
+        print(f"\n[WORKER] Processing queued message")
+        print(f"[WORKER] Sender: {sender}")
+        print(f"[WORKER] Text: {text}")
+        print(f"[WORKER] Message ID: {message_id}")
+        print(f"[WORKER] Queued at: {timestamp}")
+        
+        if not sender or not text:
+            print(f"[WORKER] ❌ Missing required fields: sender={sender}, text={text}")
+            return {"status": "error", "message": "Missing sender or text"}
+        
+        # Process the message through the assistant
+        result = await assistant_response(sender, text)
+        
+        print(f"[WORKER] ✅ Message processed successfully")
+        return {"status": "success", "result": result}
+        
+    except Exception as e:
+        print(f"[WORKER] ❌ Error processing message: {e}")
+        import traceback
+        print(f"[WORKER] Full traceback: {traceback.format_exc()}")
+        return {"status": "error", "message": str(e)}
+
 @app.post("/auth/callback")
 async def receive_whatsapp(request: Request):
     data = await request.json()
@@ -137,8 +172,9 @@ async def receive_whatsapp(request: Request):
         message = messages[0]
         sender = message["from"]
         text = message["text"]["body"]
+        message_id = message.get("id")  # WhatsApp message ID for deduplication
 
-        print(f"📨 Received message from {sender}: {text}")
+        print(f"📨 Received message from {sender}: {text} (ID: {message_id})")
 
         # ✅ Step 1: Check if user exists in MongoDB
         hashed_sender = hash_data(sender)
@@ -151,7 +187,7 @@ async def receive_whatsapp(request: Request):
             # Step 3: Send onboarding message
             onboarding_url = f"{FRONTEND_URL}/onboarding?phone_number={sender}"
             onboarding_message = (
-                "👋 Hello! I’m *Lofy*, your personal WhatsApp assistant built to help you stay organized — effortlessly.\n\n"
+                "👋 Hello! I'm *Lofy*, your personal WhatsApp assistant built to help you stay organized — effortlessly.\n\n"
                 "With Lofy, you can:\n"
                 "- 📅 Schedule events using natural language (like 'Lunch with Sarah tomorrow at 1pm')\n"
                 "- ⏰ Set reminders for anything — even 'remind me in 3 hours to check the oven'\n"
@@ -167,8 +203,18 @@ async def receive_whatsapp(request: Request):
             # Stop further processing
             return {"ok": True}
         
-        # ✅ Step 4: Proceed to assistant only if user exists
-        return await assistant_response(sender, text)
+        # ✅ Step 4: Enqueue message for async processing (fast webhook response)
+        from utils.cloud_tasks import enqueue_message
+        
+        try:
+            await enqueue_message(sender, text, message_id)
+            print(f"✅ Message from {sender} queued successfully")
+            return {"ok": True, "status": "queued"}
+        except Exception as enqueue_error:
+            print(f"❌ Failed to enqueue message: {enqueue_error}")
+            # Fallback to inline processing if queue fails
+            print(f"⚠️ Falling back to inline processing")
+            return await assistant_response(sender, text)
 
     except Exception as e:
         print(f"❌ Error in receive_whatsapp: {e}")

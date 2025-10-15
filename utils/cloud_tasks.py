@@ -3,6 +3,7 @@ Cloud Tasks utility functions for scheduling recurring and one-time tasks.
 """
 import os
 import json
+import hashlib
 from datetime import datetime, time, timedelta
 from google.cloud import tasks_v2
 import pytz
@@ -95,4 +96,73 @@ async def schedule_daily_task(endpoint_url: str, task_name: str, hour: int, minu
                 raise
         else:
             print(f"❌ Failed to schedule daily task '{task_name}': {e}")
+            raise
+
+
+async def enqueue_message(sender: str, text: str, message_id: str = None):
+    """
+    Enqueue a WhatsApp message for async processing using Cloud Tasks.
+    
+    This allows the webhook to respond quickly while the actual AI processing
+    happens asynchronously in the background.
+    
+    Args:
+        sender: Phone number of the sender
+        text: Message text content
+        message_id: Optional WhatsApp message ID for deduplication
+    
+    Returns:
+        Task response from Cloud Tasks
+    """
+    client = tasks_v2.CloudTasksAsyncClient()
+    
+    project = os.getenv("GOOGLE_PROJECT_ID")
+    queue_id = "assistant-queue"  # Dedicated queue for assistant messages
+    location = os.getenv("QUEUE_LOCATION")
+    app_url = os.getenv("APP_URL")
+    
+    # Construct queue path
+    parent = client.queue_path(project, location, queue_id)
+    
+    # Worker endpoint URL
+    endpoint_url = f"{app_url}/worker/process-message"
+    
+    # Request body with message data
+    body_data = {
+        "sender": sender,
+        "text": text,
+        "message_id": message_id,
+        "timestamp": datetime.now(pytz.UTC).isoformat()
+    }
+    
+    # Create task name with deduplication
+    # Use message_id if available, otherwise generate from sender+text+timestamp
+    if message_id:
+        task_id = f"msg-{message_id}"
+    else:
+        # Generate deterministic ID from content for deduplication
+        content_hash = hashlib.md5(f"{sender}-{text}-{datetime.now(pytz.UTC).timestamp()}".encode()).hexdigest()[:16]
+        task_id = f"msg-{content_hash}"
+    
+    # Build task
+    task = {
+        "http_request": {
+            "http_method": tasks_v2.HttpMethod.POST,
+            "url": endpoint_url,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(body_data).encode(),
+        }
+    }
+    
+    try:
+        # Create task (executes immediately if no schedule_time is set)
+        response = await client.create_task(request={"parent": parent, "task": task})
+        print(f"✅ Message queued for processing — Task: {response.name}")
+        return response
+    except Exception as e:
+        if "ALREADY_EXISTS" in str(e):
+            print(f"⚠️ Duplicate message detected (task_id: {task_id}) — Skipping")
+            return None
+        else:
+            print(f"❌ Failed to enqueue message: {e}")
             raise

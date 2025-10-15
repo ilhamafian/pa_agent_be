@@ -221,8 +221,8 @@ async def start_scheduler():
                 await schedule_daily_task(
                     endpoint_url=tomorrow_url,
                     task_name=f"tomorrow-reminder-{user_id}",
-                    hour=22,
-                    minute=53,
+                    hour=19,
+                    minute=30,
                     timezone_str="Asia/Kuala_Lumpur",
                     request_body={"user_id": user_id}
                 )
