@@ -368,7 +368,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
 
                 try:
                     if function_name == "create_event":
-                        result = create_event(
+                        result = await create_event(
                             title=args["title"],
                             date=args["date"],
                             time=args.get("time"),
@@ -395,10 +395,10 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                         )
 
                     elif function_name == "get_events":
-                        reply = get_events(natural_range=args["natural_range"], user_id=user_id)
+                        reply = await get_events(natural_range=args["natural_range"], user_id=user_id)
 
                     elif function_name == "create_custom_reminder":
-                        result = create_custom_reminder(
+                        result = await create_custom_reminder(
                             message=args["message"],
                             remind_in=args["remind_in"],
                             user_id=user_id,
@@ -407,13 +407,13 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                         reply = result["message"]
 
                     elif function_name == "list_reminders":
-                        result = list_reminders(user_id=user_id)
+                        result = await list_reminders(user_id=user_id)
                         reply = result["message"]
 
                     elif function_name == "create_task":
                         # Get the priority, defaulting to medium
                         task_priority = args.get("priority", "medium")
-                        result = create_task(
+                        result = await create_task(
                             title=args["title"],
                             priority=task_priority,
                             description=args.get("description"),
@@ -428,7 +428,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                         )
 
                     elif function_name == "get_tasks":
-                        tasks = get_tasks(
+                        tasks = await get_tasks(
                             user_id=user_id,
                             status=args.get("status"),
                             priority=args.get("priority")
@@ -479,7 +479,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                             reply = "\n".join(reply_lines).strip()
 
                     elif function_name == "update_task_status":
-                        result = update_task_status(
+                        result = await update_task_status(
                             task_title=args["task_title"],
                             status=args["status"],
                             user_id=user_id
@@ -494,7 +494,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                             reply = "❌ Task not found or update failed."
 
                     elif function_name == "update_event":
-                        result = update_event(
+                        result = await update_event(
                             user_id=user_id,
                             original_title=args["original_title"],
                             new_title=args.get("new_title"),
@@ -506,14 +506,14 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                         reply = result
 
                     elif function_name == "delete_event":
-                        result = delete_event(
+                        result = await delete_event(
                             user_id=user_id,
                             title=args["title"]
                         )
                         reply = result
 
                     elif function_name == "create_note":
-                        result = create_note(
+                        result = await create_note(
                             user_id=user_id,
                             content=args["content"],
                             title=args.get("title")
@@ -526,7 +526,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                         )
 
                     elif function_name == "search_notes":
-                        notes = search_notes(
+                        notes = await search_notes(
                             user_id=user_id,
                             query=args["query"],
                             k=args.get("k", 5)
@@ -569,7 +569,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
 
                     elif function_name == "retrieve_note":
                         try:
-                            selected_note = retrieve_note(
+                            selected_note = await retrieve_note(
                                 user_id=user_id,
                                 selection=args["selection"]
                             )
