@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from db.mongo import db  # Added db import for calendar collection
+from bson import ObjectId
 
 load_dotenv(dotenv_path=".env.local", override=True)
 
@@ -194,9 +195,9 @@ async def start_scheduler():
     
     try:
         for user in users:
-            user_id = user.get("user_id")
+            user_id = str(user.get('_id'))
             if not user_id:
-                print(f"⚠️ Skipping user without user_id: {user.get('_id')}")
+                print(f"⚠️ Skipping user without user_id: {user_id}")
                 continue
             
             # Schedule today's reminder at 8:30 AM for this user
@@ -221,7 +222,7 @@ async def start_scheduler():
                     endpoint_url=tomorrow_url,
                     task_name=f"tomorrow-reminder-{user_id}",
                     hour=22,
-                    minute=8,
+                    minute=30,
                     timezone_str="Asia/Kuala_Lumpur",
                     request_body={"user_id": user_id}
                 )
