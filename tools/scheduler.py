@@ -170,35 +170,68 @@ async def format_combined_reminder(events, tasks, nickname, is_tomorrow=True):
 async def start_scheduler():
     """
     Initialize Cloud Tasks for daily reminders.
-    Schedules recurring tasks for today and tomorrow reminders.
+    Creates individual recurring tasks for each user in the database.
     """
     from utils.cloud_tasks import schedule_daily_task
+    from db.mongo import db
     
     app_url = os.getenv("APP_URL")
+    users_collection = db["users"]
+    
+    # Fetch all users from the database
+    users_cursor = users_collection.find({})
+    users = await users_cursor.to_list(length=None)
+    
+    if not users:
+        print("⚠️ No users found in database. Skipping scheduler initialization.")
+        return
+    
+    print(f"\n📋 Found {len(users)} users. Scheduling daily reminders...")
     
     # Schedule daily reminders using Cloud Tasks
+    today_count = 0
+    tomorrow_count = 0
+    
     try:
-        # Schedule today's reminder at 8:30 AM
-        today_url = f"{app_url}/reminder/daily/today"
-        schedule_daily_task(
-            endpoint_url=today_url,
-            hour=8,
-            minute=30,
-            timezone_str="Asia/Kuala_Lumpur"
-        )
-        
-        # Schedule tomorrow's reminder at 7:30 PM
-        tomorrow_url = f"{app_url}/reminder/daily/tomorrow"
-        schedule_daily_task(
-            endpoint_url=tomorrow_url,
-            hour=21,
-            minute=27,
-            timezone_str="Asia/Kuala_Lumpur"
-        )
+        for user in users:
+            user_id = user.get("user_id")
+            if not user_id:
+                print(f"⚠️ Skipping user without user_id: {user.get('_id')}")
+                continue
+            
+            # Schedule today's reminder at 8:30 AM for this user
+            today_url = f"{app_url}/reminder/daily/today/user"
+            try:
+                await schedule_daily_task(
+                    endpoint_url=today_url,
+                    task_name=f"today-reminder-{user_id}",
+                    hour=8,
+                    minute=30,
+                    timezone_str="Asia/Kuala_Lumpur",
+                    request_body={"user_id": user_id}
+                )
+                today_count += 1
+            except Exception as e:
+                print(f"❌ Failed to schedule today's task for user {user_id}: {e}")
+            
+            # Schedule tomorrow's reminder at 7:30 PM for this user
+            tomorrow_url = f"{app_url}/reminder/daily/tomorrow/user"
+            try:
+                await schedule_daily_task(
+                    endpoint_url=tomorrow_url,
+                    task_name=f"tomorrow-reminder-{user_id}",
+                    hour=22,
+                    minute=8,
+                    timezone_str="Asia/Kuala_Lumpur",
+                    request_body={"user_id": user_id}
+                )
+                tomorrow_count += 1
+            except Exception as e:
+                print(f"❌ Failed to schedule tomorrow's task for user {user_id}: {e}")
         
         print("\n✅ Cloud Tasks scheduler initialized with:")
-        print("   • Today's reminder at 8:30 AM")
-        print("   • Tomorrow's reminder at 7:30 PM")
+        print(f"   • {today_count} Today's reminders at 8:30 AM")
+        print(f"   • {tomorrow_count} Tomorrow's reminders at 7:30 PM")
     except Exception as e:
         print(f"❌ Failed to schedule daily tasks: {e}")
         raise
