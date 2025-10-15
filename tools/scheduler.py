@@ -38,7 +38,7 @@ async def get_events_for_user_on_date(user_id, target_date):
         end_time = tz.localize(datetime.combine(target_date, datetime.max.time()))
         
         # Query MongoDB for events within the date range
-        cursor = await calendar_collection.find({
+        cursor = calendar_collection.find({
             "user_id": user_id,
             "start_time": {"$gte": start_time, "$lte": end_time}
         }).sort("start_time", 1)  # Sort by start_time ascending
@@ -222,7 +222,7 @@ async def start_scheduler():
                     endpoint_url=tomorrow_url,
                     task_name=f"tomorrow-reminder-{user_id}",
                     hour=22,
-                    minute=40,
+                    minute=53,
                     timezone_str="Asia/Kuala_Lumpur",
                     request_body={"user_id": user_id}
                 )
