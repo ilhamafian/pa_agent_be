@@ -57,7 +57,6 @@ def schedule_daily_task(endpoint_url: str, task_name: str, hour: int, minute: in
     
     # Build task
     task = {
-        "name": f"{parent}/tasks/{task_name}",
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
             "url": endpoint_url,
