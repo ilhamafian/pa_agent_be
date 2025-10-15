@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     await init_calendar_indexes()
     
     # Initialize Cloud Tasks scheduler for daily reminders
-    await start_scheduler()
+    # await start_scheduler()
     
     yield  # ✅ Allow FastAPI to run
 
