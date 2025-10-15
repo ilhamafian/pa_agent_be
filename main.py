@@ -18,6 +18,7 @@ from routers.admin import router as admin_router
 from contextlib import asynccontextmanager
 from routers.reminder import router as reminder_router
 # Internal Imports
+from utils.cloud_tasks import enqueue_message
 from tools.scheduler import start_scheduler
 from ai.workflows.assistant import assistant_response
 from db.mongo import oauth_states_collection, oauth_tokens_collection
@@ -118,7 +119,19 @@ async def admin_chat(request: Request):
     sender = "601234567890"
     text = data["message"]
     print(f"Admin chat data: {data}")
-    return await assistant_response(sender, text, True)
+
+    # Queue the message for processing (like webhook)
+    try:
+        task_response = await enqueue_message(sender, text)
+        if task_response:
+            return {"status": "queued", "task_name": task_response.name}
+        else:
+            # Duplicate message detected, still process it directly
+            print(f"falling back to direct processing")
+            return await assistant_response(sender, text, True)
+    except Exception as e:
+        print(f"Queue failed, falling back to direct processing: {e}")
+        return await assistant_response(sender, text, True)
 
 @app.post("/worker/process-message")
 async def process_message_worker(request: Request):
@@ -204,7 +217,7 @@ async def receive_whatsapp(request: Request):
             return {"ok": True}
         
         # ✅ Step 4: Enqueue message for async processing (fast webhook response)
-        from utils.cloud_tasks import enqueue_message
+
         
         try:
             await enqueue_message(sender, text, message_id)

@@ -11,6 +11,8 @@ from bson import ObjectId
 
 load_dotenv(dotenv_path=".env.local", override=True)
 
+app_url = os.getenv("APP_URL")
+
 # MongoDB calendar collection
 calendar_collection = db["calendar"]
 
@@ -175,8 +177,6 @@ async def start_scheduler():
     """
     from utils.cloud_tasks import schedule_daily_task
     from db.mongo import db
-    
-    app_url = os.getenv("APP_URL")
     users_collection = db["users"]
     
     # Fetch all users from the database

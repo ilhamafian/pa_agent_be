@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from jose import jwt
 import pytz
 from db.mongo import client
+from utils.cloud_tasks import schedule_daily_task
 from utils.utils import hash_data, encrypt_phone, send_whatsapp_message
 
 load_dotenv(dotenv_path=".env.local", override=True)
@@ -18,6 +19,7 @@ SECRET_KEY = os.getenv("TOKEN_SECRET_KEY")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 day
+app_url = os.getenv("APP_URL")
 
 with open("ai/prompts/onboarding_guide.txt", "r", encoding="utf-8") as f:
     onboarding_guide_prompt = f.read()
@@ -122,6 +124,26 @@ async def create_user(data: UserPayload):
 
         token = create_access_token(data={"user_id": user_id_str})
         await send_onboarding_guide(data.phone_number)
+        
+
+        today_url = f"{app_url}/reminder/daily/today/user"
+        tomorrow_url = f"{app_url}/reminder/daily/tomorrow/user"
+        await schedule_daily_task(
+            endpoint_url=today_url,
+            task_name=f"today-reminder-{user_id_str}",
+            hour=8,
+            minute=30,
+            timezone_str="Asia/Kuala_Lumpur",
+            request_body={"user_id": user_id_str}
+        )
+        await schedule_daily_task(
+            endpoint_url=tomorrow_url,
+            task_name=f"tomorrow-reminder-{user_id_str}",
+            hour=19,
+            minute=30,
+            timezone_str="Asia/Kuala_Lumpur",
+            request_body={"user_id": user_id_str}
+        )
         return {
             "token": token,
             "message": "User created successfully",
