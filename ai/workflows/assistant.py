@@ -24,10 +24,8 @@ from tools.calendar import (
     AuthRequiredError
 )
 from tools.reminder import (
-    create_event_reminder_tool,
     create_custom_reminder_tool,
     list_reminders_tool,
-    create_event_reminder,
     create_custom_reminder,
     list_reminders
 )
@@ -252,7 +250,6 @@ tools = [
     get_events_tool,
     update_event_tool,
     delete_event_tool,
-    create_event_reminder_tool,
     create_custom_reminder_tool,
     list_reminders_tool,
     create_task_tool,
@@ -399,17 +396,6 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
 
                     elif function_name == "get_events":
                         reply = get_events(natural_range=args["natural_range"], user_id=user_id)
-
-                    elif function_name == "create_event_reminder":
-                        result = create_event_reminder(
-                            event_title=args["event_title"],
-                            minutes_before=args.get("minutes_before", 30),
-                            event_date=args.get("event_date"),
-                            event_time=args.get("event_time"),
-                            user_id=user_id,
-                            phone_number=phone_number
-                        )
-                        reply = result["message"]
 
                     elif function_name == "create_custom_reminder":
                         result = create_custom_reminder(

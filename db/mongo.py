@@ -25,6 +25,7 @@ users_collection = db["users"]
 oauth_states_collection = db["oauth_states"]
 oauth_tokens_collection = db["oauth_tokens"]
 conversation_history_collection = db["conversation_history"]
+reminders_collection = db["reminders"]
 
 # Test connection and create index asynchronously
 async def init_mongodb():

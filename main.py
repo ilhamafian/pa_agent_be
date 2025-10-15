@@ -16,6 +16,7 @@ from routers.integrations import router as integrations_router
 from routers.dashboard import router as dashboard_router
 from routers.admin import router as admin_router
 from contextlib import asynccontextmanager
+from routers.reminder import router as reminder_router
 # Internal Imports
 from tools.scheduler import start_scheduler
 from ai.workflows.assistant import assistant_response
@@ -50,9 +51,8 @@ async def lifespan(app: FastAPI):
     from tools.calendar import init_calendar_indexes
     await init_calendar_indexes()
     
-    # Optional: start your scheduler here
+    # Initialize Cloud Tasks scheduler for daily reminders
     await start_scheduler()
-    print("✅ Scheduler started")
     
     yield  # ✅ Allow FastAPI to run
 
@@ -159,6 +159,7 @@ async def receive_whatsapp(request: Request):
                 "- 📝 Save personal notes and search them later with smart suggestions\n\n"
                 "- 🧾 Detect and auto-schedule bookings from templates (great for freelancers and service providers)\n\n"
                 f"To activate your account and unlock these features, tap below:\n👉 {onboarding_url}\n\n"
+                "Lofy Assistant, created by Ilham Ghazi & Meor Izzuddin\n\n"
             )
 
             await send_whatsapp_message(sender, onboarding_message)
@@ -172,10 +173,6 @@ async def receive_whatsapp(request: Request):
     except Exception as e:
         print(f"❌ Error in receive_whatsapp: {e}")
         return {"ok": False, "error": str(e)}
-
-@app.get("/test")
-async def test_page(request: Request):
-    return PlainTextResponse("Test page reached!", status_code=200)
 
 @app.get("/auth/google_callback")
 async def auth_callback(request: Request):
@@ -269,6 +266,10 @@ print("[MAIN] ✅ Settings router registered")
 print("[MAIN] Registering integrations_router...")
 app.include_router(integrations_router)
 print("[MAIN] ✅ Integrations router registered")
+
+print("[MAIN] Registering reminder_router...")
+app.include_router(reminder_router)
+print("[MAIN] ✅ Reminder router registered")
 
 print("[MAIN] Registering dashboard_router...")
 app.include_router(dashboard_router)

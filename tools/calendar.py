@@ -12,8 +12,10 @@ from dotenv import load_dotenv
 # from googleapiclient.errors import HttpError
 # from google.auth.exceptions import RefreshError
 # from utils.utils import get_auth_url
-from db.mongo import db  # Import MongoDB connection
+from db.mongo import db, users_collection  # Import MongoDB connection
 from dateutil.relativedelta import relativedelta
+from tools.reminder import create_event_reminder
+from bson import ObjectId
 
 load_dotenv(dotenv_path=".env.local", override=True)  # Make sure environment variables are loaded
 
@@ -40,77 +42,6 @@ class AuthRequiredError(Exception):
 
 async def create_event(time: str = None, end_time: str = None, date: str = None, title: str = None, user_id=None, description: str = None) -> dict:
     """Create a calendar event in MongoDB"""
-    
-    # ============ GOOGLE CALENDAR CODE - COMMENTED OUT ============
-    # token_data = oauth_tokens_collection.find_one({"user_id": user_id})
-    # print("Looking for user_id:", user_id, type(user_id))
-    # 
-    # if user_id is None:
-    #     raise ValueError("Missing user_id in create_event() call!")
-    # print("Token data: ", token_data)
-    # 
-    # if not token_data:
-    #     raise AuthRequiredError("AUTH_REQUIRED")
-    # 
-    # try:
-    #     creds = Credentials(
-    #         token=token_data["token"]["token"],
-    #         refresh_token=token_data["token"]["refresh_token"],
-    #         token_uri=token_data["token"]["token_uri"],
-    #         client_id=token_data["token"]["client_id"],
-    #         client_secret=token_data["token"]["client_secret"],
-    #         scopes=token_data["token"]["scopes"],
-    #     )
-    # 
-    #     service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
-    # 
-    #     if time and end_time:
-    #         # Timed event
-    #         start_datetime = f"{date}T{time}:00"
-    #         end_datetime = f"{date}T{end_time}:00"
-    #         event = {
-    #             'summary': title,
-    #             'description': description or "",
-    #             'start': {
-    #                 'dateTime': start_datetime,
-    #                 'timeZone': 'Asia/Kuala_Lumpur',
-    #             },
-    #             'end': {
-    #                 'dateTime': end_datetime,
-    #                 'timeZone': 'Asia/Kuala_Lumpur',
-    #             },
-    #         }
-    #     else:
-    #         # All-day event
-    #         event = {
-    #             'summary': title,
-    #             'description': description or "",
-    #             'start': {
-    #                 'date': date,
-    #             },
-    #             'end': {
-    #                 'date': date,
-    #             },
-    #         }
-    # 
-    #     print("In event:", event)
-    #     event = service.events().insert(calendarId='primary', body=event).execute()
-    #     print('Event created:', event.get('htmlLink'))
-    #     return event
-    # 
-    # except (RefreshError, HttpError) as e:
-    #     print(f"[DEBUG] Token error in create_event: {e}")
-    #     if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
-    #         raise AuthRequiredError("AUTH_REQUIRED")
-    #     else:
-    #         raise e
-    # except Exception as e:
-    #     print(f"[DEBUG] Unexpected error in create_event: {e}")
-    #     if "invalid_grant" in str(e) or "Token has been expired or revoked" in str(e):
-    #         raise AuthRequiredError("AUTH_REQUIRED")
-    #     else:
-    #         raise e
-    # ============ END GOOGLE CALENDAR CODE ============
     
     # ============ MONGODB IMPLEMENTATION ============
     if user_id is None:
@@ -200,6 +131,28 @@ async def create_event(time: str = None, end_time: str = None, date: str = None,
     event['id'] = str(result.inserted_id)  # For compatibility
     
     print(f"✅ Event created: {event['summary']}")
+    
+    # Automatically create a reminder 15 minutes before the event (only for timed events)
+    if not event.get('is_all_day', False):
+        try:
+            # Get user's phone number from database
+            user_doc = await users_collection.find_one({"_id": ObjectId(user_id)})
+            if user_doc and 'phone_number' in user_doc:
+                phone_number = user_doc['phone_number']
+                # Create event reminder
+                await create_event_reminder(
+                    event_title=event['summary'],
+                    event_start_time=event['start_time'],
+                    user_id=user_id,
+                    phone_number=phone_number,
+                    minutes_before=15
+                )
+            else:
+                print(f"⚠️ Could not create reminder: phone number not found for user {user_id}")
+        except Exception as e:
+            print(f"⚠️ Failed to create event reminder: {e}")
+            # Don't fail the event creation if reminder creation fails
+    
     return event
 
 async def update_event(user_id=None, original_title=None, new_title=None, new_date=None, new_start_time=None, new_end_time=None, new_description=None):
