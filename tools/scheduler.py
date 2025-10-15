@@ -182,7 +182,6 @@ async def start_scheduler():
         today_url = f"{app_url}/reminder/daily/today"
         schedule_daily_task(
             endpoint_url=today_url,
-            task_name="daily-today-reminder",
             hour=8,
             minute=30,
             timezone_str="Asia/Kuala_Lumpur"
@@ -192,9 +191,8 @@ async def start_scheduler():
         tomorrow_url = f"{app_url}/reminder/daily/tomorrow"
         schedule_daily_task(
             endpoint_url=tomorrow_url,
-            task_name="daily-tomorrow-reminder",
-            hour=19,
-            minute=30,
+            hour=21,
+            minute=27,
             timezone_str="Asia/Kuala_Lumpur"
         )
         
