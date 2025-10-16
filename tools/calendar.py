@@ -451,10 +451,11 @@ async def get_events(natural_range="today", user_id=None):
 
     # Fetch events from MongoDB
     print(f"[DEBUG] Fetching events from {start_time.isoformat()} to {end_time.isoformat()}")
-    events = list(await calendar_collection.find({
+    cursor = calendar_collection.find({
         "user_id": user_id,
         "start_time": {"$gte": start_time, "$lte": end_time}
-    }).sort("start_time", 1))  # Sort by start_time ascending
+    }).sort("start_time", 1)
+    events = await cursor.to_list(length=None)
     
     print(f"[DEBUG] Number of events fetched: {len(events)}")
 
