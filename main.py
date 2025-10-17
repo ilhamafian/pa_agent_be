@@ -113,25 +113,25 @@ async def verify_webhook(request: Request):
         return PlainTextResponse(content=params.get("hub.challenge"), status_code=200)
     return PlainTextResponse("Verification failed", status_code=403)
 
-# @app.post("/playground")
-# async def admin_chat(request: Request):
-#     data = await request.json()
-#     sender = "601234567890"
-#     text = data["message"]
-#     print(f"Admin chat data: {data}")
+@app.post("/playground")
+async def admin_chat(request: Request):
+    data = await request.json()
+    sender = "601234567890"
+    text = data["message"]
+    print(f"Admin chat data: {data}")
 
     # Queue the message for processing (like webhook)
-    # try:
-        # task_response = await enqueue_message(sender, text)
-        # if task_response:
-        #     return {"status": "queued", "task_name": task_response.name}
-        # else:
+    try:
+        task_response = await enqueue_message(sender, text)
+        if task_response:
+            return {"status": "queued", "task_name": task_response.name}
+        else:
             # Duplicate message detected, still process it directly
-    #         print(f"falling back to direct processing")
-    #         return await assistant_response(sender, text, True)
-    # except Exception as e:
-    #     print(f"Queue failed, falling back to direct processing: {e}")
-    #     return await assistant_response(sender, text, True)
+            print(f"falling back to direct processing")
+            return await assistant_response(sender, text, True)
+    except Exception as e:
+        print(f"Queue failed, falling back to direct processing: {e}")
+        return await assistant_response(sender, text, True)
 
 @app.post("/worker/process-message")
 async def process_message_worker(request: Request):
