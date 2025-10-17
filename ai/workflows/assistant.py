@@ -279,6 +279,19 @@ def _flatten_response_tools(tools_list):
             flattened.append(t)
     return flattened
 
+def normalize_text(text, lang):
+    # Optional: basic Malay/Mandarin cleanup for better parsing
+    replacements = {
+        "ptg": "petang",
+        "mlm": "malam",
+        "pg": "pagi",
+        "minggu dpn": "minggu depan",
+        "minggu ni": "minggu ini"
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text
+
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
 # Load the system prompt template once at module level
@@ -318,11 +331,35 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
 
         print(f"Processing message from {user_id}: {user_input}")
 
-        # Calculate current date/time fresh for each request
+        # Calculate current date/time fresh for each request with enhanced context
         now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
+        
+        # Basic dates
         today_str = now.strftime("%Y-%m-%d")
         tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
-        system_prompt = system_prompt_template.format(today=today_str, tomorrow=tomorrow_str, about_yourself=about_yourself, profession=profession, language=language)
+        
+        # Enhanced date context for better relative date understanding
+        current_day_name = now.strftime("%A")  # e.g., "Friday"
+        current_date_full = now.strftime("%A, %B %d, %Y")  # e.g., "Friday, October 17, 2025"
+        
+        # Calculate next 7 days with day names
+        next_week_context = []
+        for i in range(1, 8):
+            future_date = now + timedelta(days=i)
+            day_label = "tomorrow" if i == 1 else future_date.strftime("%A").lower()
+            next_week_context.append(f"{day_label}: {future_date.strftime('%Y-%m-%d')}")
+        next_week_str = ", ".join(next_week_context)
+        
+        system_prompt = system_prompt_template.format(
+            today=today_str,
+            tomorrow=tomorrow_str,
+            current_day_name=current_day_name,
+            current_date_full=current_date_full,
+            next_week=next_week_str,
+            about_yourself=about_yourself,
+            profession=profession,
+            language=language
+        )
 
         # Get conversation history from cache (falls back to MongoDB)
         history = await get_cached_conversation_history(user_id)

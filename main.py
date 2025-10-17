@@ -122,10 +122,10 @@ async def admin_chat(request: Request):
 
     # Queue the message for processing (like webhook)
     try:
-        task_response = await enqueue_message(sender, text)
-        if task_response:
-            return {"status": "queued", "task_name": task_response.name}
-        else:
+        # task_response = await enqueue_message(sender, text)
+        # if task_response:
+        #     return {"status": "queued", "task_name": task_response.name}
+        # else:
             # Duplicate message detected, still process it directly
             print(f"falling back to direct processing")
             return await assistant_response(sender, text, True)
