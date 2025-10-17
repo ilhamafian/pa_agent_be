@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from db.mongo import get_conversation_history, save_message_to_history, conversation_history_collection
 from cachetools import TTLCache
 import asyncio
+from dateparser import parse as parse_date
+from langdetect import detect
 
 # Internal Imports
 from tools.calendar import (
@@ -279,6 +281,19 @@ def _flatten_response_tools(tools_list):
             flattened.append(t)
     return flattened
 
+def normalize_text(text, lang):
+    # Optional: basic Malay/Mandarin cleanup for better parsing
+    replacements = {
+        "ptg": "petang",
+        "mlm": "malam",
+        "pg": "pagi",
+        "minggu dpn": "minggu depan",
+        "minggu ni": "minggu ini"
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text
+
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
 # Load the system prompt template once at module level
@@ -315,6 +330,30 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
         
         user_id = str(user["_id"])
         user_input = text
+
+       # ✅ NEW: Parse potential date/time expressions before logging
+        normalized_text = normalize_text(user_input.lower(), language)
+        try:
+            detected_lang = detect(normalized_text) if language == "auto" else language
+            parsed_date = parse_date(
+                normalized_text,
+                languages=[detected_lang],
+                settings={
+                    "PREFER_DATES_FROM": "future",
+                    "TIMEZONE": "Asia/Kuala_Lumpur",
+                    "RETURN_AS_TIMEZONE_AWARE": True
+                }
+            )
+            if parsed_date:
+                # Optionally, attach it to system prompt for awareness
+                resolved_date = parsed_date.strftime("%Y-%m-%d %H:%M")
+                print(f"🕒 Date detected in user input: {resolved_date}")
+                normalized_text += f"\n[Parsed date resolved in code: {resolved_date}]"
+        except Exception as e:
+            print(f"⚠️ Date parse error: {e}")
+
+        # Replace user_input with normalized version
+        user_input = normalized_text
 
         print(f"Processing message from {user_id}: {user_input}")
 
