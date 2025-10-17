@@ -28,7 +28,7 @@ async def dashboard(current_user: dict = Depends(get_current_user)):
     tasks_list = tasks_doc["tasks"] if tasks_doc and "tasks" in tasks_doc else []
     
     # Get dashboard events for the next 4 days (today + next 3 days)
-    events_data = get_dashboard_events(user_id)
+    events_data = await get_dashboard_events(user_id)
     events_list = events_data.get("events", [])
 
     return {
