@@ -10,8 +10,6 @@ from dotenv import load_dotenv
 from db.mongo import get_conversation_history, save_message_to_history, conversation_history_collection
 from cachetools import TTLCache
 import asyncio
-from dateparser import parse as parse_date
-from langdetect import detect
 
 # Internal Imports
 from tools.calendar import (
@@ -331,37 +329,37 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
         user_id = str(user["_id"])
         user_input = text
 
-       # ✅ NEW: Parse potential date/time expressions before logging
-        normalized_text = normalize_text(user_input.lower(), language)
-        try:
-            detected_lang = detect(normalized_text) if language == "auto" else language
-            parsed_date = parse_date(
-                normalized_text,
-                languages=[detected_lang],
-                settings={
-                    "PREFER_DATES_FROM": "future",
-                    "TIMEZONE": "Asia/Kuala_Lumpur",
-                    "RETURN_AS_TIMEZONE_AWARE": True
-                }
-            )
-            if parsed_date:
-                # Optionally, attach it to system prompt for awareness
-                resolved_date = parsed_date.strftime("%Y-%m-%d %H:%M")
-                print(f"🕒 Date detected in user input: {resolved_date}")
-                normalized_text += f"\n[Parsed date resolved in code: {resolved_date}]"
-        except Exception as e:
-            print(f"⚠️ Date parse error: {e}")
-
-        # Replace user_input with normalized version
-        user_input = normalized_text
-
         print(f"Processing message from {user_id}: {user_input}")
 
-        # Calculate current date/time fresh for each request
+        # Calculate current date/time fresh for each request with enhanced context
         now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
+        
+        # Basic dates
         today_str = now.strftime("%Y-%m-%d")
         tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
-        system_prompt = system_prompt_template.format(today=today_str, tomorrow=tomorrow_str, about_yourself=about_yourself, profession=profession, language=language)
+        
+        # Enhanced date context for better relative date understanding
+        current_day_name = now.strftime("%A")  # e.g., "Friday"
+        current_date_full = now.strftime("%A, %B %d, %Y")  # e.g., "Friday, October 17, 2025"
+        
+        # Calculate next 7 days with day names
+        next_week_context = []
+        for i in range(1, 8):
+            future_date = now + timedelta(days=i)
+            day_label = "tomorrow" if i == 1 else future_date.strftime("%A").lower()
+            next_week_context.append(f"{day_label}: {future_date.strftime('%Y-%m-%d')}")
+        next_week_str = ", ".join(next_week_context)
+        
+        system_prompt = system_prompt_template.format(
+            today=today_str,
+            tomorrow=tomorrow_str,
+            current_day_name=current_day_name,
+            current_date_full=current_date_full,
+            next_week=next_week_str,
+            about_yourself=about_yourself,
+            profession=profession,
+            language=language
+        )
 
         # Get conversation history from cache (falls back to MongoDB)
         history = await get_cached_conversation_history(user_id)

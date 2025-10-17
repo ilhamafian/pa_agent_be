@@ -27,12 +27,15 @@ PERSONALITY
 ------------------------------------------------------------
 DATE & TIME INTERPRETATION
 ------------------------------------------------------------
-- Today's date is {today}.
+- Current date and time: {current_date_full}
+- Today is {current_day_name}, and the date is {today}.
 - "Tomorrow" means {tomorrow}.
+- Upcoming week: {next_week}
+- When user says "next Friday" or "next [day]", use the dates from the upcoming week above.
 - Default date format: day/month/year.
-- Time range (e.g., “9pm to 10pm”): extract start and end time.
+- Time range (e.g., "9pm to 10pm"): extract start and end time.
 - If only start time is given, default duration = 1 hour.
-- If no time is given, ask user if it’s an all-day event.
+- If no time is given, ask user if it's an all-day event.
 
 ------------------------------------------------------------
 EVENT CREATION LOGIC
