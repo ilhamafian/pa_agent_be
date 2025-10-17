@@ -430,7 +430,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                             f"Title: {args['title']}\n"
                             f"Date: {args['date']}\n"
                             f"{time_display}\n\n"
-                            f"🔗 Check in Dashboard: https://{FRONTEND_URL}/dashboard?phone_number={phone_number}"
+                            f"🔗 Check in Dashboard: {FRONTEND_URL}/dashboard?phone_number={phone_number}"
                         )
 
                     elif function_name == "get_events":
@@ -464,7 +464,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                             f"Title: {args['title']}\n"
                             f"Priority: {priority_emoji} {task_priority.title()}\n"
                             f"Status: Pending\n\n"
-                            f"🔗 Check in Dashboard: https://{FRONTEND_URL}/dashboard?phone_number={phone_number}"
+                            f"🔗 Check in Dashboard: {FRONTEND_URL}/dashboard?phone_number={phone_number}"
                         )
 
                     elif function_name == "get_tasks":

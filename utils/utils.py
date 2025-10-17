@@ -259,86 +259,7 @@ async def get_dashboard_events(user_id: str):
     Get events for the current day (starting at 00:00am) through the next 3 days.
     Returns events in JSON format with title, date (DD-MM-YYYY), and time.
     """
-    # ============ GOOGLE CALENDAR CODE - COMMENTED OUT ============
-    # # Check if user has valid OAuth token
-    # token_data = oauth_tokens_collection.find_one({"user_id": user_id})
-    # if not token_data:
-    #     return {"events": [], "error": "AUTH_REQUIRED"}
-    # 
-    # try:
-    #     # Initialize Google Calendar service
-    #     creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-    #     service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-    #     
-    #     # Set timezone to Asia/Kuala_Lumpur
-    #     tz = pytz.timezone("Asia/Kuala_Lumpur")
-    #     now = datetime.now(tz)
-    #     
-    #     # Set start time to beginning of current day (00:00am)
-    #     start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    #     
-    #     # Set end time to end of the day 3 days from now (23:59:59)
-    #     end_time = start_time + timedelta(days=4) - timedelta(seconds=1)
-    #     
-    #     # Fetch events from Google Calendar
-    #     events_result = service.events().list(
-    #         calendarId='primary',
-    #         timeMin=start_time.isoformat(),
-    #         timeMax=end_time.isoformat(),
-    #         singleEvents=True,
-    #         orderBy='startTime'
-    #     ).execute()
-    #     
-    #     events = events_result.get("items", [])
-    #     
-    #     # Format events for dashboard
-    #     formatted_events = []
-    #     for event in events:
-    #         title = event.get("summary", "No Title")
-    #         
-    #         # Get start date/time information
-    #         start_dt_str = event["start"].get("dateTime")
-    #         end_dt_str = event["end"].get("dateTime")
-    #         start_date_str = event["start"].get("date")
-    #         end_date_str = event["end"].get("date")
-    #         
-    #         # Determine if it's an all-day event
-    #         is_all_day = start_date_str is not None
-    #         
-    #         if is_all_day:
-    #             # All-day event
-    #             event_date = datetime.strptime(start_date_str, "%Y-%m-%d")
-    #             formatted_date = event_date.strftime("%d-%m-%Y")
-    #             formatted_time = "All-day"
-    #         else:
-    #             # Timed event
-    #             try:
-    #                 start_dt = datetime.fromisoformat(start_dt_str)
-    #                 end_dt = datetime.fromisoformat(end_dt_str)
-    #                 
-    #                 # Format date as DD-MM-YYYY
-    #                 formatted_date = start_dt.strftime("%d-%m-%Y")
-    #                 
-    #                 # Format time as HH:MM - HH:MM
-    #                 formatted_time = f"{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}"
-    #             except Exception:
-    #                 # Fallback if datetime parsing fails
-    #                 formatted_date = "Unknown"
-    #                 formatted_time = "All-day"
-    #         
-    #         formatted_events.append({
-    #             "title": title,
-    #             "date": formatted_date,
-    #             "time": formatted_time
-    #         })
-    #     
-    #     return {"events": formatted_events}
-    #     
-    # except Exception as e:
-    #     print(f"Error fetching dashboard events: {e}")
-    #     return {"events": [], "error": str(e)}
-    # ============ END GOOGLE CALENDAR CODE ============
-    
+   
     # ============ MONGODB IMPLEMENTATION ============
     from db.mongo import db
     calendar_collection = db["calendar"]
@@ -352,13 +273,10 @@ async def get_dashboard_events(user_id: str):
         end_time = start_time + timedelta(days=6) - timedelta(seconds=1)
 
         # Fetch events matching this window
-        cursor = await calendar_collection.find({
+        cursor = calendar_collection.find({
             "user_id": user_id,
-            "$or": [
-                {"start.dateTime": {"$gte": start_time.isoformat(), "$lte": end_time.isoformat()}},
-                {"start.date": {"$gte": start_time.date().isoformat(), "$lte": end_time.date().isoformat()}}
-            ]
-        }).sort("start.dateTime", 1)
+            "start_time": {"$gte": start_time, "$lte": end_time}
+        }).sort("start_time", 1)
         
         events = []
         async for event in cursor:
