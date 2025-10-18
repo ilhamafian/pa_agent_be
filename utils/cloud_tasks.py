@@ -166,3 +166,61 @@ async def enqueue_message(sender: str, text: str, message_id: str = None):
         else:
             print(f"❌ Failed to enqueue message: {e}")
             raise
+
+
+async def enqueue_announcement(phone_number: str, announcement: str = "", use_template: bool = False, template_name: str = None):
+    """
+    Enqueue an announcement WhatsApp message for async processing using Cloud Tasks.
+    
+    This allows the announcement endpoint to respond quickly while the actual
+    message sending happens asynchronously in the background.
+    
+    Args:
+        phone_number: Encrypted or decrypted phone number to send to
+        announcement: Message text content (for free-form messages)
+        use_template: Whether to use a WhatsApp template
+        template_name: Template name if use_template=True
+    
+    Returns:
+        Task response from Cloud Tasks
+    """
+    client = tasks_v2.CloudTasksAsyncClient()
+    
+    project = os.getenv("GOOGLE_PROJECT_ID")
+    queue_id = "announcement-queue" 
+    location = os.getenv("QUEUE_LOCATION")
+    app_url = os.getenv("APP_URL")
+    
+    # Construct queue path
+    parent = client.queue_path(project, location, queue_id)
+    
+    # Worker endpoint URL
+    endpoint_url = f"{app_url}/admin/send/announcement"
+    
+    # Request body with announcement data
+    body_data = {
+        "phone_number": phone_number,
+        "announcement": announcement,
+        "use_template": use_template,
+        "template_name": template_name,
+        "timestamp": datetime.now(pytz.UTC).isoformat()
+    }
+    
+    # Build task
+    task = {
+        "http_request": {
+            "http_method": tasks_v2.HttpMethod.POST,
+            "url": endpoint_url,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(body_data).encode(),
+        }
+    }
+    
+    try:
+        # Create task (executes immediately if no schedule_time is set)
+        response = await client.create_task(request={"parent": parent, "task": task})
+        print(f"✅ Announcement queued for {phone_number[:5]}**** — Task: {response.name}")
+        return response
+    except Exception as e:
+        print(f"❌ Failed to enqueue announcement for {phone_number[:5]}****: {e}")
+        raise
