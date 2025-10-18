@@ -195,7 +195,7 @@ async def enqueue_announcement(phone_number: str, announcement: str = "", use_te
     parent = client.queue_path(project, location, queue_id)
     
     # Worker endpoint URL
-    endpoint_url = f"{app_url}/admin/send/announcement"
+    endpoint_url = f"{app_url}/send/announcement"
     
     # Request body with announcement data
     body_data = {
