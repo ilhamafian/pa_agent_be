@@ -342,6 +342,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
         # Enhanced date context for better relative date understanding
         current_day_name = now.strftime("%A")  # e.g., "Friday"
         current_date_full = now.strftime("%A, %B %d, %Y")  # e.g., "Friday, October 17, 2025"
+        current_time = now.strftime("%I:%M %p")  # e.g., "03:45 PM"
         
         # Calculate next 7 days with day names
         next_week_context = []
@@ -356,6 +357,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
             tomorrow=tomorrow_str,
             current_day_name=current_day_name,
             current_date_full=current_date_full,
+            current_time=current_time,
             next_week=next_week_str,
             about_yourself=about_yourself,
             profession=profession,

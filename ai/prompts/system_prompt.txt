@@ -28,6 +28,7 @@ PERSONALITY
 DATE & TIME INTERPRETATION
 ------------------------------------------------------------
 - Current date and time: {current_date_full}
+- Current time: {current_time}
 - Today is {current_day_name}, and the date is {today}.
 - "Tomorrow" means {tomorrow}.
 - Upcoming week: {next_week}
