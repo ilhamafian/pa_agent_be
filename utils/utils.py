@@ -268,14 +268,13 @@ async def get_dashboard_events(user_id: str):
         tz = pytz.timezone("Asia/Kuala_Lumpur")
         now = datetime.now(tz)
 
-        # Define time window (today to +6 days)
+        # Start from today at midnight
         start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_time = start_time + timedelta(days=6) - timedelta(seconds=1)
 
-        # Fetch events matching this window
+        # Fetch all upcoming events (no upper limit)
         cursor = calendar_collection.find({
             "user_id": user_id,
-            "start_time": {"$gte": start_time, "$lte": end_time}
+            "start_time": {"$gte": start_time}
         }).sort("start_time", 1)
         
         events = []
@@ -295,12 +294,10 @@ async def get_dashboard_events(user_id: str):
             end_date_str = end.get("date")
 
             if start_date_str:
-                # All-day event
                 event_date = datetime.strptime(start_date_str, "%Y-%m-%d")
                 formatted_date = event_date.strftime("%d-%m-%Y")
                 formatted_time = "All-day"
             elif start_dt_str:
-                # Timed event (parse with dateparser)
                 start_dt = dateparser.parse(start_dt_str).astimezone(tz)
                 end_dt = dateparser.parse(end_dt_str).astimezone(tz)
                 formatted_date = start_dt.strftime("%d-%m-%Y")
