@@ -107,8 +107,8 @@ async def create_user(data: UserPayload):
             "email": data.email,
             "language": data.language,
             "metadata": {
-                "about_yourself": data.metadata.about_yourself,
                 "profession": data.metadata.profession,
+                "about_yourself": data.metadata.about_yourself,
                 "source": data.metadata.source,
             },
             "onboarding_completed": False,
