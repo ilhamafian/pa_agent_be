@@ -26,6 +26,7 @@ class UpdateProfilePayload(BaseModel):
     user_id: str
     name: str
     language: str
+    about_yourself: str
 
 # Pydantic model for daily briefing structure
 class DailyBriefingPayload(BaseModel):
@@ -73,7 +74,8 @@ async def update_profile(data: UpdateProfilePayload):
 
     update_data = {
         "nickname": data.name,
-        "language": data.language
+        "language": data.language,
+        "about_yourself": data.about_yourself
     }
 
     result = await users_collection.update_one({"_id": oid}, {"$set": update_data})
