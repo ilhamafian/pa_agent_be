@@ -10,7 +10,7 @@ load_dotenv(dotenv_path=".env.local", override=True)
 
 db_name = os.environ.get("DB_NAME")
 db = client[db_name]
-tasks_collection = db["task_list"]
+tasks_collection = db["tasks"]
 bugs_collection = db["bugs"]
 
 class BugPayload(BaseModel):

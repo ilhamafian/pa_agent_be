@@ -10,7 +10,7 @@ load_dotenv(dotenv_path=".env.local", override=True)
 
 db_name = os.environ.get("DB_NAME")
 db = client[db_name]
-task_list_collection = db["task_list"]
+task_list_collection = db["tasks"]
 
 class AuthRequiredError(Exception):
     pass
