@@ -16,7 +16,9 @@ from routers.integrations import router as integrations_router
 from routers.dashboard import router as dashboard_router
 from routers.admin import router as admin_router
 from contextlib import asynccontextmanager
+from routers.reminder import router as reminder_router
 # Internal Imports
+from utils.cloud_tasks import enqueue_message
 from tools.scheduler import start_scheduler
 from ai.workflows.assistant import assistant_response
 from db.mongo import oauth_states_collection, oauth_tokens_collection
@@ -50,9 +52,8 @@ async def lifespan(app: FastAPI):
     from tools.calendar import init_calendar_indexes
     await init_calendar_indexes()
     
-    # Optional: start your scheduler here
-    await start_scheduler()
-    print("✅ Scheduler started")
+    # Initialize Cloud Tasks scheduler for daily reminders
+    # await start_scheduler()
     
     yield  # ✅ Allow FastAPI to run
 
@@ -118,7 +119,54 @@ async def admin_chat(request: Request):
     sender = "601234567890"
     text = data["message"]
     print(f"Admin chat data: {data}")
-    return await assistant_response(sender, text, True)
+
+    # Queue the message for processing (like webhook)
+    try:
+        task_response = await enqueue_message(sender, text)
+        if task_response:
+            return {"status": "queued", "task_name": task_response.name}
+        else:
+            # Duplicate message detected, still process it directly
+            print(f"falling back to direct processing")
+            return await assistant_response(sender, text, True)
+    except Exception as e:
+        print(f"Queue failed, falling back to direct processing: {e}")
+        return await assistant_response(sender, text, True)
+
+@app.post("/worker/process-message")
+async def process_message_worker(request: Request):
+    """
+    Worker endpoint for processing queued WhatsApp messages.
+    Called by Cloud Tasks asynchronously.
+    """
+    try:
+        data = await request.json()
+        sender = data.get("sender")
+        text = data.get("text")
+        message_id = data.get("message_id")
+        timestamp = data.get("timestamp")
+        
+        print(f"\n[WORKER] Processing queued message")
+        print(f"[WORKER] Sender: {sender}")
+        print(f"[WORKER] Text: {text}")
+        print(f"[WORKER] Message ID: {message_id}")
+        print(f"[WORKER] Queued at: {timestamp}")
+        
+        if not sender or not text:
+            print(f"[WORKER] ❌ Missing required fields: sender={sender}, text={text}")
+            return {"status": "error", "message": "Missing sender or text"}
+        
+        # Process the message through the assistant
+        result = await assistant_response(sender, text)
+        
+        print(f"[WORKER] ✅ Message processed successfully")
+        return {"status": "success", "result": result}
+        
+    except Exception as e:
+        print(f"[WORKER] ❌ Error processing message: {e}")
+        import traceback
+        print(f"[WORKER] Full traceback: {traceback.format_exc()}")
+        return {"status": "error", "message": str(e)}
 
 @app.post("/auth/callback")
 async def receive_whatsapp(request: Request):
@@ -137,8 +185,9 @@ async def receive_whatsapp(request: Request):
         message = messages[0]
         sender = message["from"]
         text = message["text"]["body"]
+        message_id = message.get("id")  # WhatsApp message ID for deduplication
 
-        print(f"📨 Received message from {sender}: {text}")
+        print(f"📨 Received message from {sender}: {text} (ID: {message_id})")
 
         # ✅ Step 1: Check if user exists in MongoDB
         hashed_sender = hash_data(sender)
@@ -151,7 +200,7 @@ async def receive_whatsapp(request: Request):
             # Step 3: Send onboarding message
             onboarding_url = f"{FRONTEND_URL}/onboarding?phone_number={sender}"
             onboarding_message = (
-                "👋 Hello! I’m *Lofy*, your personal WhatsApp assistant built to help you stay organized — effortlessly.\n\n"
+                "👋 Hello! I'm *Lofy*, your personal WhatsApp assistant built to help you stay organized — effortlessly.\n\n"
                 "With Lofy, you can:\n"
                 "- 📅 Schedule events using natural language (like 'Lunch with Sarah tomorrow at 1pm')\n"
                 "- ⏰ Set reminders for anything — even 'remind me in 3 hours to check the oven'\n"
@@ -159,6 +208,7 @@ async def receive_whatsapp(request: Request):
                 "- 📝 Save personal notes and search them later with smart suggestions\n\n"
                 "- 🧾 Detect and auto-schedule bookings from templates (great for freelancers and service providers)\n\n"
                 f"To activate your account and unlock these features, tap below:\n👉 {onboarding_url}\n\n"
+                "Lofy Assistant, created by Ilham Ghazi & Meor Izzuddin\n\n"
             )
 
             await send_whatsapp_message(sender, onboarding_message)
@@ -166,16 +216,22 @@ async def receive_whatsapp(request: Request):
             # Stop further processing
             return {"ok": True}
         
-        # ✅ Step 4: Proceed to assistant only if user exists
-        return await assistant_response(sender, text)
+        # ✅ Step 4: Enqueue message for async processing (fast webhook response)
+
+        
+        try:
+            await enqueue_message(sender, text, message_id)
+            print(f"✅ Message from {sender} queued successfully")
+            return {"ok": True, "status": "queued"}
+        except Exception as enqueue_error:
+            print(f"❌ Failed to enqueue message: {enqueue_error}")
+            # Fallback to inline processing if queue fails
+            print(f"⚠️ Falling back to inline processing")
+            return await assistant_response(sender, text)
 
     except Exception as e:
         print(f"❌ Error in receive_whatsapp: {e}")
         return {"ok": False, "error": str(e)}
-
-@app.get("/test")
-async def test_page(request: Request):
-    return PlainTextResponse("Test page reached!", status_code=200)
 
 @app.get("/auth/google_callback")
 async def auth_callback(request: Request):
@@ -269,6 +325,10 @@ print("[MAIN] ✅ Settings router registered")
 print("[MAIN] Registering integrations_router...")
 app.include_router(integrations_router)
 print("[MAIN] ✅ Integrations router registered")
+
+print("[MAIN] Registering reminder_router...")
+app.include_router(reminder_router)
+print("[MAIN] ✅ Reminder router registered")
 
 print("[MAIN] Registering dashboard_router...")
 app.include_router(dashboard_router)

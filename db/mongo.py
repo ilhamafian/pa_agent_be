@@ -25,6 +25,7 @@ users_collection = db["users"]
 oauth_states_collection = db["oauth_states"]
 oauth_tokens_collection = db["oauth_tokens"]
 conversation_history_collection = db["conversation_history"]
+reminders_collection = db["reminders"]
 
 # Test connection and create index asynchronously
 async def init_mongodb():
@@ -61,7 +62,7 @@ async def get_all_users():
         print("[MONGO] Executing find({}) on users collection...")
         # Only fetch the fields we need: _id and phone_number
         projection = {"_id": 1, "phone_number": 1}
-        cursor = await users_collection.find({}, projection, batch_size=100).max_time_ms(30000)  # 30 second timeout
+        cursor = users_collection.find({}, projection, batch_size=100).max_time_ms(30000)  # 30 second timeout
         print("[MONGO] Using projection to fetch only _id and phone_number fields")
         
         print("[MONGO] Converting cursor to list...")

@@ -12,6 +12,11 @@ from utils.utils import send_whatsapp_message, get_event_loop
 from bson import ObjectId
 from db.mongo import client
 import os
+from google.cloud import tasks_v2
+import pytz
+import asyncio
+from datetime import datetime
+from dotenv import load_dotenv
 
 # Load environment variables first
 load_dotenv(dotenv_path=".env.local", override=True)
@@ -24,105 +29,6 @@ SCOPES = json.loads(os.getenv("SCOPES", "[]"))
 
 class AuthRequiredError(Exception):
     pass
-
-async def create_event_reminder(event_title: str, minutes_before: int = 30, user_id=None, phone_number=None, event_date: str = None, event_time: str = None) -> dict:
-    """
-    Creates a reminder for an existing calendar event.
-    
-    Args:
-        event_title: Title of the calendar event to remind about
-        minutes_before: How many minutes before the event to send reminder (default: 30)
-        user_id: User ID for authentication and reminder delivery
-        event_date: Date of the event (YYYY-MM-DD format)
-        event_time: Time of the event (HH:MM format)
-    """
-    
-    if user_id is None:
-        raise ValueError("Missing user_id in create_event_reminder() call!")
-    
-    # Check if user has authentication
-    token_data = await oauth_tokens_collection.find_one({"user_id": user_id})
-    if not token_data:
-        raise AuthRequiredError("AUTH_REQUIRED")
-    
-    # Calculate reminder time
-    if event_date and event_time:
-        event_datetime_str = f"{event_date}T{event_time}:00"
-        event_datetime = datetime.fromisoformat(event_datetime_str)
-        # Convert to Kuala Lumpur timezone
-        tz = pytz.timezone("Asia/Kuala_Lumpur")
-        event_datetime = tz.localize(event_datetime)
-    else:
-        # If no specific time provided, we'll need to find the event in their calendar
-        creds = Credentials.from_authorized_user_info(token_data["token"], SCOPES)
-        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-        
-        # Search for the event in their calendar (next 30 days)
-        now = datetime.now(pytz.timezone("Asia/Kuala_Lumpur"))
-        time_max = now + timedelta(days=30)
-        
-        events_result = service.events().list(
-            calendarId='primary',
-            timeMin=now.isoformat(),
-            timeMax=time_max.isoformat(),
-            q=event_title,
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute()
-        
-        events = events_result.get("items", [])
-        if not events:
-            return {"status": "error", "message": f"Could not find event '{event_title}' in your calendar. Please specify the date and time manually."}
-        
-        # Use the first matching event
-        event = events[0]
-        start = event["start"].get("dateTime", event["start"].get("date"))
-        
-        try:
-            event_datetime = datetime.fromisoformat(start)
-            if not event_datetime.tzinfo:
-                tz = pytz.timezone("Asia/Kuala_Lumpur")
-                event_datetime = tz.localize(event_datetime)
-        except ValueError:
-            return {"status": "error", "message": f"Found event '{event_title}' but it appears to be an all-day event. Please specify a specific time for the reminder."}
-    
-    # Calculate reminder time
-    reminder_time = event_datetime - timedelta(minutes=minutes_before)
-    
-    # Store reminder in database
-    reminder_data = {
-        "user_id": user_id,
-        "phone_number": phone_number,
-        "type": "event_reminder",
-        "event_title": event_title,
-        "event_datetime": event_datetime,
-        "reminder_time": reminder_time,
-        "minutes_before": minutes_before,
-        "message": f"⏰ Reminder: '{event_title}' starts in {minutes_before} minutes!",
-        "status": "scheduled",
-        "created_at": datetime.now(pytz.timezone("Asia/Kuala_Lumpur"))
-    }
-    
-    result = await reminders_collection.insert_one(reminder_data)
-    reminder_id = str(result.inserted_id)
-    
-    # Schedule the reminder
-    from tools.scheduler import scheduler
-    scheduler.add_job(
-        send_reminder,
-        'date',
-        run_date=reminder_time,
-        args=[reminder_id],
-        id=f"reminder_{reminder_id}",
-        misfire_grace_time=300  # 5 minutes grace time
-    )
-    
-    return {
-        "status": "success",
-        "message": f"✅ Reminder created! You'll be notified {minutes_before} minutes before '{event_title}' on {event_datetime.strftime('%B %d, %Y at %I:%M %p')}",
-        "reminder_id": reminder_id,
-        "reminder_time": reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')
-    }
 
 async def create_custom_reminder(message: str, remind_in: str, user_id=None, phone_number=None) -> dict:
     """
@@ -287,17 +193,10 @@ async def create_custom_reminder(message: str, remind_in: str, user_id=None, pho
     
     result = await reminders_collection.insert_one(reminder_data)
     reminder_id = str(result.inserted_id)
-    
-    # Schedule the reminder
-    from tools.scheduler import scheduler
-    scheduler.add_job(
-        send_reminder,
-        'date',
-        run_date=reminder_time,
-        args=[reminder_id],
-        id=f"reminder_{reminder_id}",
-        misfire_grace_time=300  # 5 minutes grace time
-    )
+
+    # Instead of guna send_reminder, move send_reminder jadi consumer
+
+    enqueue_reminder_task(reminder_id, reminder_time)
     
     time_until = reminder_time - now
     if time_until.days > 0:
@@ -316,6 +215,102 @@ async def create_custom_reminder(message: str, remind_in: str, user_id=None, pho
         "reminder_id": reminder_id,
         "reminder_time": reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')
     }
+
+def  enqueue_reminder_task(reminder_id: str, reminder_time: datetime):
+    client = tasks_v2.CloudTasksClient()
+
+    project = os.getenv("GOOGLE_PROJECT_ID")
+    queue = os.getenv("QUEUE_ID")
+    location = os.getenv("QUEUE_LOCATION")
+    url = os.getenv("REMINDER_HANDLER_URL")
+
+    # Construct queue path
+    parent = client.queue_path(project, location, queue)
+
+    # Convert reminder_time to UTC
+    reminder_time_utc = reminder_time.astimezone(pytz.UTC)
+
+    # Build task payload
+    payload = json.dumps({"reminder_id": reminder_id})
+
+    # Configure scheduled task
+    task = {
+        "http_request": {
+            "http_method": tasks_v2.HttpMethod.POST,
+            "url": url,
+            "headers": {"Content-Type": "application/json"},
+            "body": payload.encode(),
+        },
+        "schedule_time": reminder_time_utc
+    }
+
+    response = client.create_task(request={"parent": parent, "task": task})
+    print(f"✅ Task scheduled for {reminder_time} — ID: {response.name}")
+
+async def create_event_reminder(event_title: str, event_start_time: datetime, user_id: str, phone_number: str, minutes_before: int = 15) -> dict:
+    """
+    Creates a reminder for a calendar event.
+    
+    Args:
+        event_title: The title of the event
+        event_start_time: The start time of the event (timezone-aware datetime)
+        user_id: User ID for reminder delivery
+        phone_number: User's phone number for WhatsApp delivery
+        minutes_before: How many minutes before the event to remind (default: 15)
+    
+    Returns:
+        dict: Result with status and reminder details
+    """
+    try:
+        tz = pytz.timezone("Asia/Kuala_Lumpur")
+        now = datetime.now(tz)
+        
+        # Calculate reminder time (minutes before event)
+        reminder_time = event_start_time - timedelta(minutes=minutes_before)
+        
+        # Only create reminder if it's in the future
+        if reminder_time <= now:
+            print(f"[EVENT REMINDER] Skipping reminder for '{event_title}' - event is too soon or has passed")
+            return {
+                "status": "skipped",
+                "message": f"Event is less than {minutes_before} minutes away, no reminder created"
+            }
+        
+        # Store reminder in database
+        reminder_data = {
+            "user_id": user_id,
+            "phone_number": phone_number,
+            "type": "event_reminder",
+            "event_title": event_title,
+            "minutes_before": minutes_before,
+            "message": f"⏰ Reminder: Your event '{event_title}' starts in {minutes_before} minutes at {event_start_time.strftime('%I:%M %p')}",
+            "reminder_time": reminder_time,
+            "event_start_time": event_start_time,
+            "status": "scheduled",
+            "created_at": now
+        }
+        
+        result = await reminders_collection.insert_one(reminder_data)
+        reminder_id = str(result.inserted_id)
+        
+        # Enqueue the reminder task
+        enqueue_reminder_task(reminder_id, reminder_time)
+        
+        print(f"✅ Event reminder created for '{event_title}' at {reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        
+        return {
+            "status": "success",
+            "message": f"Reminder set for {minutes_before} minutes before event",
+            "reminder_id": reminder_id,
+            "reminder_time": reminder_time.strftime('%Y-%m-%d %H:%M:%S %Z')
+        }
+        
+    except Exception as e:
+        print(f"[EVENT REMINDER ERROR] Failed to create reminder for '{event_title}': {e}")
+        return {
+            "status": "error",
+            "message": f"Failed to create reminder: {str(e)}"
+        }
 
 async def send_reminder(reminder_id: str):
     """
@@ -357,93 +352,6 @@ async def send_reminder(reminder_id: str):
             {"_id": ObjectId(reminder_id)},
             {"$set": {"status": "failed", "error": str(e)}}
         )
-
-async def reload_reminders():
-    """
-    Reloads all scheduled reminders from MongoDB and re-schedules them.
-    This function is called on server startup to restore reminders after a restart.
-    """
-    try:
-        from tools.scheduler import scheduler
-        
-        print("\n[REMINDER RELOAD] Starting reminder reload from MongoDB...")
-        tz = pytz.timezone("Asia/Kuala_Lumpur")
-        now = datetime.now(tz)
-        
-        # Find all scheduled reminders that haven't been sent yet
-        cursor = reminders_collection.find({
-            "status": "scheduled",
-            "reminder_time": {"$exists": True}
-        })
-        scheduled_reminders = await cursor.to_list(length=None)
-        
-        print(f"[REMINDER RELOAD] Found {len(scheduled_reminders)} scheduled reminders in database")
-        
-        reloaded_count = 0
-        skipped_past_count = 0
-        error_count = 0
-        
-        for reminder in scheduled_reminders:
-            try:
-                reminder_id = str(reminder["_id"])
-                reminder_time = reminder["reminder_time"]
-                
-                # Ensure reminder_time is timezone-aware
-                if not reminder_time.tzinfo:
-                    reminder_time = tz.localize(reminder_time)
-                
-                # Check if reminder time has passed
-                if reminder_time <= now:
-                    # If within grace period (5 minutes), still schedule it
-                    time_diff = (now - reminder_time).total_seconds()
-                    if time_diff <= 300:  # 5 minutes grace period
-                        print(f"[REMINDER RELOAD] Reminder {reminder_id} is within grace period, scheduling immediately")
-                    else:
-                        print(f"[REMINDER RELOAD] Skipping past reminder {reminder_id} - was due at {reminder_time}")
-                        # Mark as missed
-                        await reminders_collection.update_one(
-                            {"_id": reminder["_id"]},
-                            {"$set": {"status": "missed", "missed_at": now}}
-                        )
-                        skipped_past_count += 1
-                        continue
-                
-                # Re-schedule the reminder
-                job_id = f"reminder_{reminder_id}"
-                
-                # Check if job already exists (avoid duplicates)
-                existing_job = scheduler.get_job(job_id)
-                if existing_job:
-                    print(f"[REMINDER RELOAD] Job {job_id} already exists, skipping")
-                    continue
-                
-                scheduler.add_job(
-                    send_reminder,
-                    'date',
-                    run_date=reminder_time,
-                    args=[reminder_id],
-                    id=job_id,
-                    misfire_grace_time=300  # 5 minutes grace time
-                )
-                
-                reloaded_count += 1
-                reminder_type = reminder.get("type", "unknown")
-                print(f"[REMINDER RELOAD] Reloaded {reminder_type} reminder {reminder_id} scheduled for {reminder_time}")
-                
-            except Exception as e:
-                error_count += 1
-                print(f"[REMINDER RELOAD ERROR] Failed to reload reminder {reminder.get('_id')}: {e}")
-        
-        print(f"[REMINDER RELOAD] Complete - Reloaded: {reloaded_count}, Skipped (past): {skipped_past_count}, Errors: {error_count}")
-        return {
-            "reloaded": reloaded_count,
-            "skipped": skipped_past_count,
-            "errors": error_count
-        }
-        
-    except Exception as e:
-        print(f"[REMINDER RELOAD ERROR] Failed to reload reminders: {e}")
-        return {"error": str(e)}
 
 async def list_reminders(user_id=None) -> dict:
     """
@@ -487,38 +395,6 @@ async def list_reminders(user_id=None) -> dict:
         lines.append(f"{i}. {desc} ({time_str})")
     
     return {"status": "success", "message": "\n".join(lines)}
-
-# Tool definitions for the AI
-create_event_reminder_tool = {
-    "type": "function",
-    "function": {
-        "name": "create_event_reminder",
-        "description": "Creates a reminder for an existing calendar event. The reminder will be sent before the event starts.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "event_title": {
-                    "type": "string",
-                    "description": "Title of the calendar event to remind about"
-                },
-                "minutes_before": {
-                    "type": "integer",
-                    "description": "How many minutes before the event to send the reminder (default: 30)",
-                    "default": 30
-                },
-                "event_date": {
-                    "type": "string",
-                    "description": "Date of the event (YYYY-MM-DD format). Optional if event can be found by title."
-                },
-                "event_time": {
-                    "type": "string",
-                    "description": "Time of the event (HH:MM format). Optional if event can be found by title."
-                }
-            },
-            "required": ["event_title"]
-        }
-    }
-}
 
 create_custom_reminder_tool = {
     "type": "function",

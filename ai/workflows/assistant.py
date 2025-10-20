@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import json
 from typing import List, Dict
 from zoneinfo import ZoneInfo
-from openai import OpenAI
+from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
 from db.mongo import get_conversation_history, save_message_to_history, conversation_history_collection
@@ -24,10 +24,8 @@ from tools.calendar import (
     AuthRequiredError
 )
 from tools.reminder import (
-    create_event_reminder_tool,
     create_custom_reminder_tool,
     list_reminders_tool,
-    create_event_reminder,
     create_custom_reminder,
     list_reminders
 )
@@ -54,6 +52,7 @@ load_dotenv(dotenv_path=".env.local", override=True)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 APP_URL = os.getenv("APP_URL")
+FRONTEND_URL = os.getenv("FRONTEND_URL")
 
 # Conversation history cache - configurable via environment variables
 CONVERSATION_CACHE_SIZE = int(os.getenv("CONVERSATION_CACHE_SIZE", "5000"))
@@ -252,7 +251,6 @@ tools = [
     get_events_tool,
     update_event_tool,
     delete_event_tool,
-    create_event_reminder_tool,
     create_custom_reminder_tool,
     list_reminders_tool,
     create_task_tool,
@@ -282,6 +280,19 @@ def _flatten_response_tools(tools_list):
             flattened.append(t)
     return flattened
 
+def normalize_text(text, lang):
+    # Optional: basic Malay/Mandarin cleanup for better parsing
+    replacements = {
+        "ptg": "petang",
+        "mlm": "malam",
+        "pg": "pagi",
+        "minggu dpn": "minggu depan",
+        "minggu ni": "minggu ini"
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text
+
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
 # Load the system prompt template once at module level
@@ -289,7 +300,7 @@ with open("ai/prompts/system_prompt.txt", "r", encoding="utf-8") as f:
     system_prompt_template = f.read()
 
 async def assistant_response(sender: str, text: str, playground_mode: bool = False):
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
     try:
         phone_number = sender
@@ -321,11 +332,35 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
 
         print(f"Processing message from {user_id}: {user_input}")
 
-        # Calculate current date/time fresh for each request
+        # Calculate current date/time fresh for each request with enhanced context
         now = datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
+        
+        # Basic dates
         today_str = now.strftime("%Y-%m-%d")
         tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
-        system_prompt = system_prompt_template.format(today=today_str, tomorrow=tomorrow_str, about_yourself=about_yourself, profession=profession, language=language)
+        
+        # Enhanced date context for better relative date understanding
+        current_day_name = now.strftime("%A")  # e.g., "Friday"
+        current_date_full = now.strftime("%A, %B %d, %Y")  # e.g., "Friday, October 17, 2025"
+        
+        # Calculate next 7 days with day names
+        next_week_context = []
+        for i in range(1, 8):
+            future_date = now + timedelta(days=i)
+            day_label = "tomorrow" if i == 1 else future_date.strftime("%A").lower()
+            next_week_context.append(f"{day_label}: {future_date.strftime('%Y-%m-%d')}")
+        next_week_str = ", ".join(next_week_context)
+        
+        system_prompt = system_prompt_template.format(
+            today=today_str,
+            tomorrow=tomorrow_str,
+            current_day_name=current_day_name,
+            current_date_full=current_date_full,
+            next_week=next_week_str,
+            about_yourself=about_yourself,
+            profession=profession,
+            language=language
+        )
 
         # Get conversation history from cache (falls back to MongoDB)
         history = await get_cached_conversation_history(user_id)
@@ -348,7 +383,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
         # Prepare chat messages with system prompt + recent history (last 10 messages)
         chat_messages = [{"role": "system", "content": system_prompt}] + history[-10:]
 
-        response = client.responses.create(
+        response = await client.responses.create(
             model="gpt-4o-mini",
             input=chat_messages,
             tools=_flatten_response_tools(tools),
@@ -371,7 +406,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
 
                 try:
                     if function_name == "create_event":
-                        result = create_event(
+                        result = await create_event(
                             title=args["title"],
                             date=args["date"],
                             time=args.get("time"),
@@ -394,25 +429,15 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                             f"📅 Calendar Event Created\n\n"
                             f"Title: {args['title']}\n"
                             f"Date: {args['date']}\n"
-                            f"{time_display}"
+                            f"{time_display}\n\n"
+                            f"🔗 Check in Dashboard: {FRONTEND_URL}/dashboard?phone_number={phone_number}"
                         )
 
                     elif function_name == "get_events":
-                        reply = get_events(natural_range=args["natural_range"], user_id=user_id)
-
-                    elif function_name == "create_event_reminder":
-                        result = create_event_reminder(
-                            event_title=args["event_title"],
-                            minutes_before=args.get("minutes_before", 30),
-                            event_date=args.get("event_date"),
-                            event_time=args.get("event_time"),
-                            user_id=user_id,
-                            phone_number=phone_number
-                        )
-                        reply = result["message"]
+                        reply = await get_events(natural_range=args["natural_range"], user_id=user_id)
 
                     elif function_name == "create_custom_reminder":
-                        result = create_custom_reminder(
+                        result = await create_custom_reminder(
                             message=args["message"],
                             remind_in=args["remind_in"],
                             user_id=user_id,
@@ -421,13 +446,13 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                         reply = result["message"]
 
                     elif function_name == "list_reminders":
-                        result = list_reminders(user_id=user_id)
+                        result = await list_reminders(user_id=user_id)
                         reply = result["message"]
 
                     elif function_name == "create_task":
                         # Get the priority, defaulting to medium
                         task_priority = args.get("priority", "medium")
-                        result = create_task(
+                        result = await create_task(
                             title=args["title"],
                             priority=task_priority,
                             description=args.get("description"),
@@ -438,11 +463,12 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                             f"✅ Task Created\n\n"
                             f"Title: {args['title']}\n"
                             f"Priority: {priority_emoji} {task_priority.title()}\n"
-                            f"Status: Pending"
+                            f"Status: Pending\n\n"
+                            f"🔗 Check in Dashboard: {FRONTEND_URL}/dashboard?phone_number={phone_number}"
                         )
 
                     elif function_name == "get_tasks":
-                        tasks = get_tasks(
+                        tasks = await get_tasks(
                             user_id=user_id,
                             status=args.get("status"),
                             priority=args.get("priority")
@@ -493,7 +519,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                             reply = "\n".join(reply_lines).strip()
 
                     elif function_name == "update_task_status":
-                        result = update_task_status(
+                        result = await update_task_status(
                             task_title=args["task_title"],
                             status=args["status"],
                             user_id=user_id
@@ -508,7 +534,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                             reply = "❌ Task not found or update failed."
 
                     elif function_name == "update_event":
-                        result = update_event(
+                        result = await update_event(
                             user_id=user_id,
                             original_title=args["original_title"],
                             new_title=args.get("new_title"),
@@ -520,14 +546,14 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                         reply = result
 
                     elif function_name == "delete_event":
-                        result = delete_event(
+                        result = await delete_event(
                             user_id=user_id,
                             title=args["title"]
                         )
                         reply = result
 
                     elif function_name == "create_note":
-                        result = create_note(
+                        result = await create_note(
                             user_id=user_id,
                             content=args["content"],
                             title=args.get("title")
@@ -536,11 +562,12 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
                             f"📝 Note Created\n\n"
                             f"Title: {result['title']}\n"
                             f"Content: {result['content'][:100]}{'...' if len(result['content']) > 100 else ''}\n"
-                            f"Created: {result['created_at'].strftime('%Y-%m-%d %H:%M')}"
+                            f"Created: {result['created_at'].strftime('%Y-%m-%d %H:%M')}\n\n"
+                            
                         )
 
                     elif function_name == "search_notes":
-                        notes = search_notes(
+                        notes = await search_notes(
                             user_id=user_id,
                             query=args["query"],
                             k=args.get("k", 5)
@@ -583,7 +610,7 @@ async def assistant_response(sender: str, text: str, playground_mode: bool = Fal
 
                     elif function_name == "retrieve_note":
                         try:
-                            selected_note = retrieve_note(
+                            selected_note = await retrieve_note(
                                 user_id=user_id,
                                 selection=args["selection"]
                             )
