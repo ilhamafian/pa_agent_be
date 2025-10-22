@@ -201,13 +201,8 @@ async def receive_whatsapp(request: Request):
             onboarding_url = f"{FRONTEND_URL}/onboarding?phone_number={sender}"
             onboarding_message = (
                 "👋 Hello! I'm *Lofy*, your personal WhatsApp assistant built to help you stay organized — effortlessly.\n\n"
-                "With Lofy, you can:\n"
-                "- 📅 Schedule events using natural language (like 'Lunch with Sarah tomorrow at 1pm')\n"
-                "- ⏰ Set reminders for anything — even 'remind me in 3 hours to check the oven'\n"
-                "- ✅ Manage tasks with priorities like high 🔴, medium 🟡, and low 🟢\n"
-                "- 📝 Save personal notes and search them later with smart suggestions\n\n"
-                "- 🧾 Detect and auto-schedule bookings from templates (great for freelancers and service providers)\n\n"
-                f"To activate your account and unlock these features, tap below:\n👉 {onboarding_url}\n\n"
+      
+                f"To activate your account, tap below:\n👉 {onboarding_url}\n\n"
                 "Lofy Assistant, created by Ilham Ghazi & Meor Izzuddin\n\n"
             )
 

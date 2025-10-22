@@ -8,7 +8,7 @@ from utils.utils import decrypt_phone, encrypt_phone, hash_data
 # encrypted_phone = hash_data(phone_number)
 # print(f"Encrypted: {encrypted_phone}")
 
-# encrypted_phone=''
+# encrypted_phone='gAAAAABo8koMQhpFvRu0IJEDl2FPuWwEqMOJ2PB7ZRRTIczhq5GIF3YJZX0wRLLFJyYlGMoajjZqYR1tWWOPdimBrK2ONSVjZA=='
 # decrypt_phone_number=decrypt_phone(encrypted_phone)
 # print(decrypt_phone_number)
 

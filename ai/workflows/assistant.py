@@ -280,19 +280,6 @@ def _flatten_response_tools(tools_list):
             flattened.append(t)
     return flattened
 
-def normalize_text(text, lang):
-    # Optional: basic Malay/Mandarin cleanup for better parsing
-    replacements = {
-        "ptg": "petang",
-        "mlm": "malam",
-        "pg": "pagi",
-        "minggu dpn": "minggu depan",
-        "minggu ni": "minggu ini"
-    }
-    for k, v in replacements.items():
-        text = text.replace(k, v)
-    return text
-
 redirect_uri = f"{APP_URL}/auth/google_callback"
 
 # Load the system prompt template once at module level

@@ -109,14 +109,16 @@ async def get_conversation_history(user_id: str) -> List[Dict]:
         user_id: The user's ID
 
     Returns:
-        List of message dictionaries with 'role' and 'content' keys
+        List of the latest 10 message dictionaries with 'role' and 'content' keys
     """
     try:
         # Get from MongoDB
         doc = await conversation_history_collection.find_one({"user_id": user_id})
         if doc and "messages" in doc:
-            print(f"📥 Retrieved {len(doc['messages'])} messages from MongoDB for user {user_id}")
-            return doc["messages"]
+            # Get only the latest 10 messages
+            latest_messages = doc["messages"][-10:]
+            print(f"📥 Retrieved {len(latest_messages)} messages (latest 10) from MongoDB for user {user_id}")
+            return latest_messages
         else:
             print(f"📭 No conversation history found in MongoDB for user {user_id}")
             return []
